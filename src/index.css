@@ -1,59 +1,159 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
+/* Dark gradient background */
 body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  min-height: 100vh;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+/* Glassmorphism classes */
+.glass {
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-/* Leaflet container fix */
-.leaflet-container {
-  width: 100%;
-  height: 100%;
-  z-index: 1;
+.glass-dark {
+  background: rgba(15, 23, 42, 0.8) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-/* Animation classes for Tailwind compatibility */
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* Gradient buttons */
+.btn-gradient-primary {
+  background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%) !important;
+  color: white !important;
+  font-weight: 600;
+  transition: all 0.3s;
 }
 
-.animate-spin {
-  animation: spin 1s linear infinite;
+.btn-gradient-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.3);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Update card styles */
+.card-modern {
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-modern:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Pulse animation for status indicators */
+.pulse-dot {
+  animation: pulse 2s infinite;
 }
 
 @keyframes pulse {
   0%, 100% {
+    transform: scale(1);
     opacity: 1;
   }
   50% {
+    transform: scale(1.5);
     opacity: 0.5;
   }
 }
 
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+/* Dark theme text colors */
+.dark-theme {
+  color: #e2e8f0 !important;
 }
 
-/* Fix for Leaflet controls */
-.leaflet-control-container .leaflet-top,
-.leaflet-control-container .leaflet-bottom {
-  z-index: 1000 !important;
+.dark-theme h1, .dark-theme h2, .dark-theme h3 {
+  color: #f1f5f9 !important;
+}
+
+.dark-theme .text-gray-600 {
+  color: #94a3b8 !important;
+}
+
+.dark-theme .text-gray-700 {
+  color: #cbd5e1 !important;
+}
+
+.dark-theme .text-gray-800 {
+  color: #e2e8f0 !important;
+}
+
+/* Fix for existing white backgrounds */
+.bg-white {
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.bg-gray-50 {
+  background: transparent !important;
+}
+
+/* Update shadows for dark theme */
+.shadow-sm {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+.shadow-lg {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Status colors with better contrast */
+.bg-green-100 {
+  background: rgba(16, 185, 129, 0.2) !important;
+}
+
+.text-green-600 {
+  color: #10b981 !important;
+}
+
+.bg-blue-100 {
+  background: rgba(59, 130, 246, 0.2) !important;
+}
+
+.text-blue-600 {
+  color: #3b82f6 !important;
+}
+
+.bg-yellow-100 {
+  background: rgba(250, 204, 21, 0.2) !important;
+}
+
+.text-yellow-600 {
+  color: #facc15 !important;
+}
+
+.bg-red-100 {
+  background: rgba(239, 68, 68, 0.2) !important;
+}
+
+.text-red-600 {
+  color: #ef4444 !important;
+}
+
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+  .mobile-glass {
+    background: rgba(15, 23, 42, 0.95) !important;
+    backdrop-filter: blur(20px);
+  }
 }
