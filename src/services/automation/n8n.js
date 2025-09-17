@@ -3,11 +3,10 @@ export class N8NAutomation {
   constructor() {
     this.webhookBase = process.env.REACT_APP_N8N_WEBHOOK_URL || 'https://your-n8n-instance.com/webhook';
     this.maxRetries = 3;
-    this.retryDelay = 1000; // Start with 1 second delay
+    this.retryDelay = 1000;
     this.errorLog = [];
   }
 
-  // Validate webhook URL is properly configured
   validateWebhookUrl() {
     if (this.webhookBase.includes('your-n8n-instance.com')) {
       console.error('N8N webhook URL not configured. Please update REACT_APP_N8N_WEBHOOK_URL in .env');
@@ -16,7 +15,6 @@ export class N8NAutomation {
     return true;
   }
 
-  // Validate customer data before sending
   validateMaintenanceData(data) {
     const errors = [];
     
@@ -26,11 +24,10 @@ export class N8NAutomation {
     }
 
     if (!data.customers || !Array.isArray(data.customers)) {
-      errors.push('Customers must be an array');6
+      errors.push('Customers must be an array');
     } else if (data.customers.length === 0) {
       errors.push('No customers to process');
     } else {
-      // Validate each customer
       data.customers.forEach((customer, index) => {
         if (!customer.phone && !customer.email) {
           errors.push(`Customer ${index + 1}: Missing contact information (phone or email)`);
@@ -47,7 +44,6 @@ export class N8NAutomation {
     };
   }
 
-  // Validate message data
   validateMessageData(message) {
     const errors = [];
 
@@ -64,9 +60,8 @@ export class N8NAutomation {
       errors.push('Sender phone number is required');
     }
 
-    // Validate phone format if provided
     const phone = message.from_phone || message.phone || message.from;
-    if (phone && !/^[\d\s\-\+\(\)]+$/.test(phone)) {
+    if (phone && !/^[\d\s\-+()]+$/.test(phone)) {
       errors.push('Invalid phone number format');
     }
 
@@ -76,7 +71,6 @@ export class N8NAutomation {
     };
   }
 
-  // Retry logic with exponential backoff
   async retryRequest(requestFunc, retries = 0) {
     try {
       return await requestFunc();
@@ -91,7 +85,6 @@ export class N8NAutomation {
     }
   }
 
-  // Handle HTTP response errors
   async handleResponse(response) {
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
@@ -100,16 +93,14 @@ export class N8NAutomation {
         const errorBody = await response.json();
         errorMessage += ` - ${errorBody.message || JSON.stringify(errorBody)}`;
       } catch (e) {
-        // Response might not be JSON
         try {
           const textBody = await response.text();
           if (textBody) errorMessage += ` - ${textBody}`;
         } catch (e2) {
-          // Couldn't read response body
+          console.log('Could not read response body');
         }
       }
 
-      // Handle specific status codes
       switch (response.status) {
         case 400:
           throw new Error(`Bad Request: ${errorMessage}`);
@@ -130,35 +121,30 @@ export class N8NAutomation {
       }
     }
 
-    // Parse successful response
     try {
       const data = await response.json();
       return data;
     } catch (error) {
-      // Response might be empty or not JSON
       return { success: true, message: 'Request processed' };
     }
   }
 
-  // Log errors for debugging
   logError(method, error, data) {
     const errorEntry = {
       timestamp: new Date().toISOString(),
       method,
       error: error.message,
-      data: JSON.stringify(data).substring(0, 500) // Truncate for storage
+      data: JSON.stringify(data).substring(0, 500)
     };
     
     this.errorLog.push(errorEntry);
     
-    // Keep only last 50 errors
     if (this.errorLog.length > 50) {
       this.errorLog = this.errorLog.slice(-50);
     }
 
     console.error(`[N8N ${method}]`, error.message, { data });
     
-    // Send to monitoring service if configured
     if (typeof window !== 'undefined' && window.Sentry) {
       window.Sentry.captureException(error, {
         extra: errorEntry
@@ -166,15 +152,12 @@ export class N8NAutomation {
     }
   }
 
-  // Get recent errors for debugging
   getRecentErrors() {
     return this.errorLog;
   }
 
-  // Main method to trigger maintenance workflow
   async triggerMaintenanceWorkflow(data) {
     try {
-      // Validate webhook URL
       if (!this.validateWebhookUrl()) {
         return {
           success: false,
@@ -182,7 +165,6 @@ export class N8NAutomation {
         };
       }
 
-      // Validate data
       const validation = this.validateMaintenanceData(data);
       if (!validation.valid) {
         return {
@@ -192,7 +174,6 @@ export class N8NAutomation {
         };
       }
 
-      // Prepare request
       const requestData = {
         trigger: 'predictive_maintenance',
         customers: data.customers.map(customer => ({
@@ -207,7 +188,6 @@ export class N8NAutomation {
         source: 'predictive_maintenance_ai'
       };
 
-      // Make request with retry logic
       const response = await this.retryRequest(async () => {
         const res = await fetch(`${this.webhookBase}/maintenance-reminder`, {
           method: 'POST',
@@ -229,7 +209,6 @@ export class N8NAutomation {
     } catch (error) {
       this.logError('triggerMaintenanceWorkflow', error, data);
       
-      // Return structured error response
       return {
         success: false,
         error: error.message,
@@ -239,10 +218,8 @@ export class N8NAutomation {
     }
   }
 
-  // Process customer response with enhanced error handling
   async processCustomerResponse(message) {
     try {
-      // Validate webhook URL
       if (!this.validateWebhookUrl()) {
         return {
           success: false,
@@ -250,7 +227,6 @@ export class N8NAutomation {
         };
       }
 
-      // Validate message data
       const validation = this.validateMessageData(message);
       if (!validation.valid) {
         return {
@@ -260,7 +236,6 @@ export class N8NAutomation {
         };
       }
 
-      // Normalize message data
       const requestData = {
         message: message.content || message.message || '',
         from: message.from_phone || message.phone || message.from || '',
@@ -269,7 +244,6 @@ export class N8NAutomation {
         source: 'customer_sms_response'
       };
 
-      // Detect intent locally as backup
       const messageText = requestData.message.toLowerCase();
       let localIntent = 'unknown';
       
@@ -283,7 +257,6 @@ export class N8NAutomation {
 
       requestData.suggestedIntent = localIntent;
 
-      // Make request with retry logic
       const response = await this.retryRequest(async () => {
         const res = await fetch(`${this.webhookBase}/customer-response`, {
           method: 'POST',
@@ -296,7 +269,6 @@ export class N8NAutomation {
         return this.handleResponse(res);
       });
 
-      // If N8N doesn't return intent, use local detection
       if (!response.intent && localIntent !== 'unknown') {
         response.intent = localIntent;
       }
@@ -311,7 +283,6 @@ export class N8NAutomation {
     } catch (error) {
       this.logError('processCustomerResponse', error, message);
       
-      // Fallback: Process locally if N8N is down
       if (error.message.includes('server error') || error.message.includes('not found')) {
         console.log('N8N unavailable, processing locally');
         
@@ -340,7 +311,6 @@ export class N8NAutomation {
     }
   }
 
-  // Check N8N webhook health
   async checkHealth() {
     try {
       if (!this.validateWebhookUrl()) {
@@ -377,7 +347,6 @@ export class N8NAutomation {
     }
   }
 
-  // Batch process multiple maintenance reminders
   async batchProcessMaintenance(customers, batchSize = 10) {
     const results = {
       successful: [],
@@ -385,7 +354,6 @@ export class N8NAutomation {
       totalProcessed: 0
     };
 
-    // Process in batches to avoid overwhelming N8N
     for (let i = 0; i < customers.length; i += batchSize) {
       const batch = customers.slice(i, i + batchSize);
       
@@ -409,7 +377,6 @@ export class N8NAutomation {
       
       results.totalProcessed += batch.length;
       
-      // Add delay between batches
       if (i + batchSize < customers.length) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
@@ -419,5 +386,5 @@ export class N8NAutomation {
   }
 }
 
-// Export singleton instance
-export default new N8NAutomation();
+const n8nAutomation = new N8NAutomation();
+export default n8nAutomation;

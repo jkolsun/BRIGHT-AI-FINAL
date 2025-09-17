@@ -40,9 +40,6 @@ function AdminApp() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-
-   console.log('Window width:', window.innerWidth);
-  console.log('isMobile:', isMobile);
   
   // Real data states
   const [jobs, setJobs] = useState([]);
