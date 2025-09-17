@@ -22,6 +22,11 @@ import WeatherWidget from './components/Dashboard/WeatherWidget';
 import JobCamera from './components/Jobs/JobCamera';
 import VoiceNotes from './components/Jobs/VoiceNotes';
 import AIStatusDashboard from './components/Dashboard/AIStatusDashboard';
+import AutoScheduleOptimizer from './components/Schedule/AutoScheduleOptimizer';
+import CustomerResponseSystem from './components/Messages/CustomerResponseSystem';
+import WeatherIntelligence from './components/Weather/WeatherIntelligence';
+import PredictiveMaintenance from './components/Maintenance/PredictiveMaintenance';
+
 
 // Initialize services
 const ai = new OpenAIService();
@@ -1428,7 +1433,10 @@ const MessagesView = () => {
     { id: 'scheduling', label: 'Job Scheduling', icon: Calendar },
     { id: 'quotes', label: 'Quotes', icon: DollarSign },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
-    { id: 'crew', label: 'Crew Management', icon: Users }
+    { id: 'crew', label: 'Crew Management', icon: Users },
+    { id: 'weather', label: 'Weather AI', icon: Cloud },
+    { id: 'predictive', label: 'Predictive AI', icon: TrendingUp },
+
   ];
 
   return (
@@ -1461,16 +1469,25 @@ const MessagesView = () => {
         {activeTab === 'quotes' && <QuotesView />}
         {activeTab === 'messages' && <MessagesView />}
         {activeTab === 'crew' && <CrewManagementView />}
+        {activeTab === 'schedule' && <AutoScheduleOptimizer />}
+        {activeTab === 'messages' && <CustomerResponseSystem />}
+        {activeTab === 'weather' && <WeatherIntelligence />}
+        {activeTab === 'predictive' && <PredictiveMaintenance />}
       </div>
     </div>
   );
 }
 
-// Simple Crew Mobile App - Just 2 Main Pages
+// Replace your existing CrewApp function in App.js with this simplified version
+
+// Replace your existing CrewApp function in App.js with this version that includes the map
+
 function CrewApp() {
   const [activeView, setActiveView] = useState('menu');
   const [clockedIn, setClockedIn] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [jobsFilter, setJobsFilter] = useState('active'); // 'active' or 'completed'
+  const [mapExpanded, setMapExpanded] = useState(false);
   
   // States for data
   const [jobs, setJobs] = useState([]);
@@ -1478,7 +1495,6 @@ function CrewApp() {
   
   useEffect(() => {
     fetchJobs();
-    // Update time every second
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -1502,6 +1518,101 @@ function CrewApp() {
       return true;
     }
     return false;
+  };
+
+  // Map Component
+  const JobMap = ({ expanded = false }) => {
+    const mapRef = React.useRef(null);
+    const mapInstanceRef = React.useRef(null);
+    const [mapLoaded, setMapLoaded] = React.useState(false);
+
+    React.useEffect(() => {
+      if (typeof window !== 'undefined' && window.L && !mapLoaded) {
+        initializeMap();
+      }
+
+      function initializeMap() {
+        try {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.remove();
+            mapInstanceRef.current = null;
+          }
+
+          if (mapRef.current) {
+            mapRef.current.innerHTML = '';
+          }
+
+          const map = window.L.map(mapRef.current, {
+            zoomControl: expanded,
+            attributionControl: false,
+            dragging: expanded,
+            scrollWheelZoom: expanded,
+            doubleClickZoom: expanded,
+            boxZoom: expanded,
+            keyboard: expanded
+          }).setView([40.7934, -77.8600], expanded ? 13 : 12);
+          
+          mapInstanceRef.current = map;
+          
+          window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+          // Add job markers with different colors based on status
+          jobs.forEach((job, index) => {
+            const baseLatLng = [40.7934, -77.8600];
+            const offset = 0.015;
+            const lat = baseLatLng[0] + (index * offset) - 0.02;
+            const lng = baseLatLng[1] + ((index % 2) * offset) - 0.01;
+            
+            const markerColor = job.status === 'Completed' ? '#10b981' : 
+                               job.status === 'In Progress' ? '#3b82f6' : '#eab308';
+            
+            const marker = window.L.circleMarker([lat, lng], {
+              color: markerColor,
+              fillColor: markerColor,
+              fillOpacity: 0.8,
+              radius: expanded ? 8 : 6
+            }).addTo(map);
+            
+            // Add popup with job info
+            marker.bindPopup(`
+              <div style="min-width: 150px;">
+                <strong>${job.customer}</strong><br>
+                ${job.type}<br>
+                Status: ${job.status}<br>
+                ${job.price || '$0'}
+              </div>
+            `);
+          });
+
+          // Add current location marker
+          window.L.circleMarker([40.7934, -77.8600], {
+            color: '#ef4444',
+            fillColor: '#ef4444',
+            fillOpacity: 1,
+            radius: expanded ? 10 : 8
+          }).addTo(map);
+
+          setMapLoaded(true);
+        } catch (error) {
+          console.error('Error initializing map:', error);
+        }
+      }
+
+      return () => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.remove();
+          mapInstanceRef.current = null;
+        }
+      };
+    }, [expanded, jobs]);
+
+    return (
+      <div 
+        ref={mapRef} 
+        className={expanded ? "h-full w-full" : "h-32 w-full"}
+        style={{ minHeight: expanded ? '100vh' : '128px' }}
+      />
+    );
   };
 
   // Simple Menu View
@@ -1530,7 +1641,7 @@ function CrewApp() {
           >
             <Users className="mx-auto mb-3 text-blue-400" size={40} />
             <h2 className="text-xl font-bold text-gray-100 mb-1">PROFILE</h2>
-            <p className="text-gray-400 text-sm">View your dashboard and stats</p>
+            <p className="text-gray-400 text-sm">View your stats</p>
           </button>
         </div>
         
@@ -1541,337 +1652,256 @@ function CrewApp() {
     </div>
   );
 
-  // Gamified Work View - Map + Game Cards + Stats
+  // Work View with Map
   const WorkView = () => {
-    const mapRef = React.useRef(null);
-    const mapInstanceRef = React.useRef(null);
-    const [mapLoaded, setMapLoaded] = React.useState(false);
-    const [viewMode, setViewMode] = useState('active'); // ADD THIS LINE - viewMode state
-
-    // Game-like stats
+    // Calculate stats
     const completedJobs = jobs.filter(j => j.status === 'Completed').length;
     const activeJobs = jobs.filter(j => j.status === 'In Progress').length;
     const scheduledJobs = jobs.filter(j => j.status === 'Scheduled').length;
-    const totalRevenue = jobs.reduce((sum, job) => {
-      if (job.status === 'Completed' && job.price) {
-        return sum + parseInt(job.price.replace(/[^0-9]/g, '') || 0);
-      }
-      return sum;
-    }, 0);
-
-    // ADD THIS - Define displayJobs based on viewMode
-    const displayJobs = viewMode === 'active' 
+    
+    // Filter jobs based on current filter
+    const displayJobs = jobsFilter === 'active' 
       ? jobs.filter(job => job.status === 'Scheduled' || job.status === 'In Progress')
       : jobs.filter(job => job.status === 'Completed');
 
-    // Initialize mini-map
-    React.useEffect(() => {
-      if (typeof window !== 'undefined' && window.L && !mapLoaded) {
-        initializeMiniMap();
-      }
-
-      function initializeMiniMap() {
-        try {
-          if (mapInstanceRef.current) {
-            mapInstanceRef.current.remove();
-            mapInstanceRef.current = null;
-          }
-
-          if (mapRef.current) {
-            mapRef.current.innerHTML = '';
-          }
-
-          const map = window.L.map(mapRef.current, {
-            zoomControl: false,
-            attributionControl: false,
-            dragging: false,
-            scrollWheelZoom: false,
-            doubleClickZoom: false,
-            boxZoom: false,
-            keyboard: false
-          }).setView([40.7934, -77.8600], 12);
+    // Expanded Map View
+    if (mapExpanded) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white relative">
+          <div className="absolute top-0 left-0 right-0 glass-dark z-10">
+            <div className="px-4 py-3 flex items-center justify-between">
+              <button onClick={() => setMapExpanded(false)} className="p-2">
+                <ChevronLeft size={24} />
+              </button>
+              <h1 className="font-bold text-lg text-gray-100">Job Map</h1>
+              <div className="w-8"></div>
+            </div>
+          </div>
+          <div className="h-screen w-full pt-14">
+            <JobMap expanded={true} />
+          </div>
           
-          mapInstanceRef.current = map;
-          
-          window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-          // Add job markers
-          jobs.forEach((job, index) => {
-            const baseLatLng = [40.7934, -77.8600];
-            const offset = 0.015;
-            const lat = baseLatLng[0] + (index * offset) - 0.02;
-            const lng = baseLatLng[1] + ((index % 2) * offset) - 0.01;
-            
-            const markerColor = job.status === 'Completed' ? '#10b981' : 
-                               job.status === 'In Progress' ? '#3b82f6' : '#eab308';
-            
-            window.L.circleMarker([lat, lng], {
-              color: markerColor,
-              fillColor: markerColor,
-              fillOpacity: 0.8,
-              radius: 6
-            }).addTo(map);
-          });
-
-          // Add current location
-          window.L.circleMarker([40.7934, -77.8600], {
-            color: '#ef4444',
-            fillColor: '#ef4444',
-            fillOpacity: 1,
-            radius: 8
-          }).addTo(map);
-
-          setMapLoaded(true);
-        } catch (error) {
-          console.error('Error initializing mini map:', error);
-        }
-      }
-
-      return () => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.remove();
-          mapInstanceRef.current = null;
-        }
-      };
-    }, [jobs]);
+          {/* Map Legend */}
+          <div className="absolute bottom-4 left-4 glass rounded-lg p-3 text-xs">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                <span className="text-gray-300">Your Location</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                <span className="text-gray-300">Scheduled</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                <span className="text-gray-300">In Progress</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                <span className="text-gray-300">Completed</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white pb-4">
         {/* Header */}
-        <div className="glass-dark">
+        <div className="glass-dark sticky top-0 z-20">
           <div className="px-4 py-3 flex items-center justify-between">
             <button onClick={() => setActiveView('menu')} className="p-2">
               <ChevronLeft size={24} />
             </button>
             <div className="text-center">
-              <h1 className="font-bold text-lg gradient-text">TODAY'S MISSION</h1>
-              <p className="text-xs text-green-300">Team Alpha • {currentTime.toLocaleDateString('en-US', { weekday: 'long' })}</p>
+              <h1 className="font-bold text-lg text-gray-100">Work Dashboard</h1>
+              <p className="text-xs text-gray-400">Team Alpha</p>
             </div>
             <div className="flex items-center gap-1">
-              <div className="w-2 h-2 bg-green-400 rounded-full pulse-dot"></div>
-              <span className="text-xs">Live</span>
+              <div className={`w-2 h-2 rounded-full ${clockedIn ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`}></div>
+              <span className="text-xs">{clockedIn ? 'Active' : 'Offline'}</span>
             </div>
           </div>
         </div>
 
-        <div className="p-4 space-y-4">
-          {/* Mini Map */}
-          <div className="glass card-modern rounded-2xl overflow-hidden">
-            <div className="p-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
-              <h3 className="font-bold text-sm">🗺️ Mission Map</h3>
-              <p className="text-xs opacity-90">{jobs.length} jobs in your area</p>
+        {/* Map Section - Click to Expand */}
+        <div className="p-4">
+          <div className="glass card-modern rounded-xl overflow-hidden">
+            <div className="p-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white flex justify-between items-center">
+              <h3 className="font-bold text-sm">Job Map</h3>
+              <button 
+                onClick={() => setMapExpanded(true)}
+                className="text-xs px-2 py-1 bg-white/20 rounded hover:bg-white/30"
+              >
+                Expand Map
+              </button>
             </div>
-            <div 
-              ref={mapRef} 
-              className="h-32 w-full bg-gray-800"
-            />
+            <div className="relative">
+              <JobMap expanded={false} />
+              <div className="absolute inset-0 bg-transparent cursor-pointer" onClick={() => setMapExpanded(true)}></div>
+            </div>
             <div className="p-2 bg-gray-800/50 text-xs text-center text-gray-400">
-              🔴 You • 🟡 Scheduled • 🔵 Active • 🟢 Complete
+              Tap to view full map • {jobs.length} jobs in area
             </div>
           </div>
+        </div>
 
-          {/* Clock In/Out Card */}
-          <div className="glass card-modern rounded-2xl p-6 text-center">
-            <div className="text-2xl font-bold text-gray-100 mb-2">
+        {/* Clock In/Out Section */}
+        <div className="px-4 pb-4">
+          <div className="glass card-modern rounded-xl p-4 text-center">
+            <div className="text-xl font-bold text-gray-100 mb-1">
               {currentTime.toLocaleTimeString()}
+            </div>
+            <div className="text-xs text-gray-400 mb-3">
+              {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             </div>
             
             <button 
               onClick={() => setClockedIn(!clockedIn)}
-              className={`w-full py-4 px-6 text-lg font-bold rounded-xl transition-all transform active:scale-95 ${
+              className={`w-full py-2 px-4 font-semibold rounded-lg transition-all text-sm ${
                 clockedIn 
-                  ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg' 
-                  : 'btn-gradient-primary shadow-lg'
+                  ? 'bg-red-500 hover:bg-red-600 text-white' 
+                  : 'btn-gradient-primary'
               }`}
             >
-              {clockedIn ? '⏰ CLOCK OUT' : '🚀 START YOUR DAY'}
+              {clockedIn ? 'CLOCK OUT' : 'CLOCK IN'}
             </button>
-            
-            <div className="text-sm text-gray-400 mt-3">
-              {clockedIn ? '💪 Working since 8:00 AM (7h 32m)' : '☀️ Ready to begin!'}
-            </div>
           </div>
+        </div>
 
-          {/* Game Stats Dashboard */}
-          <div className="glass card-modern rounded-2xl p-4">
-            <h3 className="font-bold text-gray-100 mb-3 flex items-center gap-2">
-              📊 Your Stats Today
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-gradient-to-br from-green-500/20 to-green-600/20 p-3 rounded-xl text-center border border-green-500/30">
-                <div className="text-2xl font-bold text-green-400">{completedJobs}</div>
-                <div className="text-xs text-green-300">✅ Completed</div>
+        {/* Stats Section */}
+        <div className="px-4 pb-4">
+          <div className="glass card-modern rounded-xl p-3">
+            <h3 className="font-semibold text-gray-100 mb-2 text-sm">Today's Statistics</h3>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center">
+                <div className="text-xl font-bold text-green-400">{completedJobs}</div>
+                <div className="text-xs text-gray-400">Completed</div>
               </div>
-              <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 p-3 rounded-xl text-center border border-blue-500/30">
-                <div className="text-2xl font-bold text-blue-400">{activeJobs}</div>
-                <div className="text-xs text-blue-300">⚡ Active</div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-blue-400">{activeJobs}</div>
+                <div className="text-xs text-gray-400">Active</div>
               </div>
-              <div className="bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 p-3 rounded-xl text-center border border-yellow-500/30">
-                <div className="text-2xl font-bold text-yellow-400">{scheduledJobs}</div>
-                <div className="text-xs text-yellow-300">📋 Queued</div>
-              </div>
-              <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 p-3 rounded-xl text-center border border-purple-500/30">
-                <div className="text-lg font-bold text-purple-400">${totalRevenue}</div>
-                <div className="text-xs text-purple-300">💰 Earned</div>
-              </div>
-            </div>
-            
-            {/* Progress Bar */}
-            <div className="mt-4">
-              <div className="flex justify-between text-xs text-gray-400 mb-1">
-                <span>Daily Progress</span>
-                <span>{Math.round(jobs.length > 0 ? (completedJobs / jobs.length) * 100 : 0)}%</span>
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-3">
-                <div 
-                  className="bg-gradient-to-r from-green-400 to-green-600 h-3 rounded-full transition-all duration-500"
-                  style={{ width: `${jobs.length > 0 ? (completedJobs / jobs.length) * 100 : 0}%` }}
-                ></div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-yellow-400">{scheduledJobs}</div>
+                <div className="text-xs text-gray-400">Scheduled</div>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Mission Cards */}
-          <div className="glass card-modern rounded-2xl p-4">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-gray-100 flex items-center gap-2">
-                🎯 {viewMode === 'active' ? 'Active Missions' : 'Completed Missions'} ({displayJobs.length})
-              </h3>
+        {/* Jobs Section with Fixed Scrolling */}
+        <div className="px-4">
+          <div className="glass card-modern rounded-xl p-4 flex flex-col" style={{ maxHeight: 'calc(100vh - 500px)' }}>
+            {/* Filter Buttons */}
+            <div className="flex justify-between items-center mb-3 flex-shrink-0">
+              <h3 className="font-semibold text-gray-100 text-sm">Jobs</h3>
               <div className="flex gap-2">
                 <button 
-                  onClick={() => setViewMode(viewMode === 'active' ? 'completed' : 'active')}
-                  className="px-3 py-1 glass text-gray-300 text-sm rounded-lg hover:bg-white/10 transition-colors"
+                  onClick={() => setJobsFilter('active')}
+                  className={`px-2 py-1 text-xs rounded-lg transition-colors ${
+                    jobsFilter === 'active' 
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-400/30' 
+                      : 'glass text-gray-400'
+                  }`}
                 >
-                  {viewMode === 'active' ? '✅ View Completed' : '📋 View Active'}
+                  Active ({jobs.filter(job => job.status === 'Scheduled' || job.status === 'In Progress').length})
                 </button>
-                <button onClick={fetchJobs} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                  <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                <button 
+                  onClick={() => setJobsFilter('completed')}
+                  className={`px-2 py-1 text-xs rounded-lg transition-colors ${
+                    jobsFilter === 'completed' 
+                      ? 'bg-green-500/20 text-green-400 border border-green-400/30' 
+                      : 'glass text-gray-400'
+                  }`}
+                >
+                  Completed ({jobs.filter(job => job.status === 'Completed').length})
                 </button>
               </div>
             </div>
             
-            {displayJobs.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <div className="text-4xl mb-2">
-                  {viewMode === 'active' ? '🎉' : '📭'}
-                </div>
-                <p className="font-medium">
-                  {viewMode === 'active' ? 'All missions complete!' : 'No completed missions yet'}
-                </p>
-                <p className="text-sm">
-                  {viewMode === 'active' ? 'Great work today, hero!' : 'Complete some jobs to see them here'}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-80 overflow-y-auto">
-                {displayJobs.map((job, index) => (
-                  <div key={job.id} className={`relative overflow-hidden rounded-xl border-2 transition-all glass ${
-                    job.status === 'Completed' ? 'border-green-500/30' :
-                    job.status === 'In Progress' ? 'border-blue-500/30' :
-                    'border-yellow-500/30'
-                  }`}>
-                    {/* Mission Card Header */}
-                    <div className="p-4">
-                      <div className="flex justify-between items-start mb-3">
+            {/* Jobs List with proper scrolling */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="space-y-2">
+                {displayJobs.length === 0 ? (
+                  <div className="text-center py-6 text-gray-400">
+                    <p className="font-medium text-sm">
+                      {jobsFilter === 'active' ? 'No active jobs' : 'No completed jobs'}
+                    </p>
+                  </div>
+                ) : (
+                  displayJobs.map((job) => (
+                    <div key={job.id} className="glass rounded-lg p-3">
+                      <div className="flex justify-between items-start mb-2">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-lg">🏠</span>
-                            <h4 className="font-bold text-gray-100">{job.customer}</h4>
-                            <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                              job.status === 'Completed' ? 'bg-green-500/20 text-green-400' :
-                              job.status === 'In Progress' ? 'bg-blue-500/20 text-blue-400' :
-                              'bg-yellow-500/20 text-yellow-400'
-                            }`}>
-                              {job.status === 'Completed' ? '✅ DONE' :
-                               job.status === 'In Progress' ? '⚡ ACTIVE' : '📋 READY'}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-400 mb-1">🌱 {job.type}</p>
-                          <p className="text-xs text-gray-500 flex items-center gap-1">
-                            📍 {job.address}
-                          </p>
+                          <h4 className="font-semibold text-gray-100 text-sm">{job.customer}</h4>
+                          <p className="text-xs text-gray-400">{job.type}</p>
+                          <p className="text-xs text-gray-500">{job.address}</p>
                         </div>
                         <div className="text-right">
-                          <div className="text-lg font-bold gradient-text">{job.price}</div>
-                          <div className="text-xs text-gray-500">{job.equipment}</div>
+                          <div className="font-semibold text-gray-100 text-sm">{job.price}</div>
+                          <div className="text-xs text-gray-400">{job.equipment}</div>
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex gap-2">
-                        {job.phone && (
-                          <button className="px-3 py-2 bg-blue-500/20 text-blue-400 text-sm rounded-lg font-medium flex items-center gap-1 hover:bg-blue-500/30 transition-colors border border-blue-500/30">
-                            📞 Call
-                          </button>
-                        )}
+                      {/* Status Badge and Actions */}
+                      <div className="flex items-center justify-between">
+                        <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                          job.status === 'Completed' ? 'bg-green-500/20 text-green-400' :
+                          job.status === 'In Progress' ? 'bg-blue-500/20 text-blue-400' :
+                          'bg-yellow-500/20 text-yellow-400'
+                        }`}>
+                          {job.status}
+                        </span>
                         
-                        {job.status === 'Scheduled' && viewMode === 'active' && (
-                          <button 
-                            onClick={() => updateJobStatus(job.id, 'In Progress')}
-                            className="flex-1 py-2 btn-gradient-primary text-sm rounded-lg font-medium transition-all transform active:scale-95"
-                          >
-                            🚀 START MISSION
-                          </button>
-                        )}
-                        
-                        {job.status === 'In Progress' && viewMode === 'active' && (
-                          <button 
-                            onClick={() => updateJobStatus(job.id, 'Completed')}
-                            className="flex-1 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 transition-all transform active:scale-95"
-                          >
-                            ✅ COMPLETE
-                          </button>
-                        )}
-
-                        {job.status === 'Completed' && (
-                          <div className="flex-1 py-2 text-center text-green-400 font-medium bg-green-500/20 rounded-lg border border-green-500/30">
-                            🎉 MISSION COMPLETE
-                          </div>
-                        )}
+                        <div className="flex gap-2">
+                          {job.phone && (
+                            <button className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30">
+                              Call
+                            </button>
+                          )}
+                          
+                          {job.status === 'Scheduled' && jobsFilter === 'active' && (
+                            <button 
+                              onClick={() => updateJobStatus(job.id, 'In Progress')}
+                              className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded hover:bg-green-500/30"
+                            >
+                              Start
+                            </button>
+                          )}
+                          
+                          {job.status === 'In Progress' && jobsFilter === 'active' && (
+                            <button 
+                              onClick={() => updateJobStatus(job.id, 'Completed')}
+                              className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30"
+                            >
+                              Complete
+                            </button>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Mission Notes */}
                       {job.instructions && (
-                        <div className="mt-3 p-3 bg-amber-500/10 rounded-lg border-l-4 border-amber-400">
-                          <p className="text-sm text-gray-300">
-                            <span className="font-medium">📝 Mission Brief:</span> {job.instructions}
-                          </p>
+                        <div className="mt-2 p-2 bg-amber-500/10 rounded text-xs text-gray-300 border-l-2 border-amber-400">
+                          Notes: {job.instructions}
                         </div>
                       )}
                     </div>
-
-                    {/* Card Number Badge */}
-                    <div className="absolute top-2 right-2 w-6 h-6 bg-gray-600 text-white text-xs rounded-full flex items-center justify-center font-bold">
-                      {index + 1}
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
-            )}
-          </div>
-
-          {/* Achievement Badge */}
-          {completedJobs >= 3 && (
-            <div className="bg-gradient-to-r from-yellow-400 to-orange-500 rounded-2xl shadow-lg p-4 text-white text-center">
-              <div className="text-3xl mb-2">🏆</div>
-              <h3 className="font-bold">Achievement Unlocked!</h3>
-              <p className="text-sm opacity-90">Mission Master - Completed 3+ jobs today!</p>
             </div>
-          )}
+          </div>
         </div>
       </div>
     );
   };
 
-  // Profile Dashboard View - Everything personal in one page
+  // Simplified Profile View
   const ProfileView = () => {
     const completedJobs = jobs.filter(j => j.status === 'Completed').length;
-    const totalRevenue = jobs.reduce((sum, job) => {
-      if (job.status === 'Completed' && job.price) {
-        return sum + parseInt(job.price.replace(/[^0-9]/g, '') || 0);
-      }
-      return sum;
-    }, 0);
+    const totalJobs = jobs.length;
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
@@ -1880,13 +1910,13 @@ function CrewApp() {
             <button onClick={() => setActiveView('menu')} className="p-2">
               <ChevronLeft size={24} />
             </button>
-            <h1 className="font-bold text-lg gradient-text">PROFILE</h1>
+            <h1 className="font-bold text-lg text-gray-100">Profile</h1>
             <div className="w-8"></div>
           </div>
         </div>
 
         <div className="p-4 space-y-4">
-          {/* Profile Header */}
+          {/* Profile Info */}
           <div className="glass card-modern rounded-xl p-6 text-center">
             <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mx-auto mb-3 flex items-center justify-center">
               <span className="text-2xl font-bold text-white">JS</span>
@@ -1898,84 +1928,45 @@ function CrewApp() {
               <span className="font-semibold text-gray-100">4.8</span>
               <span className="text-gray-500 text-sm">rating</span>
             </div>
-            
-            {/* Current Status */}
-            <div className="mt-4 p-3 glass rounded-lg">
-              <div className="flex items-center justify-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${clockedIn ? 'bg-green-500 pulse-dot' : 'bg-gray-400'}`}></div>
-                <span className="font-medium text-gray-100">{clockedIn ? 'Currently Working' : 'Off Duty'}</span>
-              </div>
-              <p className="text-sm text-gray-500 mt-1">
-                {clockedIn ? 'Since 8:00 AM (7h 32m)' : 'Ready to work'}
-              </p>
-            </div>
           </div>
 
-          {/* Today's Performance */}
+          {/* Today's Stats */}
           <div className="glass card-modern rounded-xl p-4">
-            <h3 className="font-bold text-gray-100 mb-3">Today's Performance</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="text-center p-3 bg-green-500/20 rounded-lg border border-green-500/30">
-                <div className="text-2xl font-bold text-green-400">{completedJobs}</div>
-                <div className="text-sm text-gray-400">Jobs Done</div>
-              </div>
-              <div className="text-center p-3 bg-blue-500/20 rounded-lg border border-blue-500/30">
-                <div className="text-2xl font-bold text-blue-400">${totalRevenue}</div>
-                <div className="text-sm text-gray-400">Revenue</div>
-              </div>
-              <div className="text-center p-3 bg-purple-500/20 rounded-lg border border-purple-500/30">
-                <div className="text-2xl font-bold text-purple-400">{clockedIn ? '7h 32m' : '0h'}</div>
-                <div className="text-sm text-gray-400">Hours Today</div>
-              </div>
-              <div className="text-center p-3 bg-yellow-500/20 rounded-lg border border-yellow-500/30">
-                <div className="text-2xl font-bold text-yellow-400">92%</div>
-                <div className="text-sm text-gray-400">Efficiency</div>
-              </div>
-            </div>
-          </div>
-
-          {/* This Week Stats */}
-          <div className="glass card-modern rounded-xl p-4">
-            <h3 className="font-bold text-gray-100 mb-3">This Week</h3>
+            <h3 className="font-semibold text-gray-100 mb-3">Performance</h3>
             <div className="space-y-3">
-              <div className="flex justify-between items-center p-2 glass rounded">
-                <span className="text-gray-300">Jobs Completed</span>
-                <span className="font-bold text-gray-100">23</span>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Jobs Completed Today</span>
+                <span className="font-bold text-gray-100">{completedJobs}</span>
               </div>
-              <div className="flex justify-between items-center p-2 glass rounded">
-                <span className="text-gray-300">Hours Worked</span>
-                <span className="font-bold text-gray-100">38h 15m</span>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Total Jobs Assigned</span>
+                <span className="font-bold text-gray-100">{totalJobs}</span>
               </div>
-              <div className="flex justify-between items-center p-2 glass rounded">
-                <span className="text-gray-300">Revenue Generated</span>
-                <span className="font-bold gradient-text">$1,850</span>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Completion Rate</span>
+                <span className="font-bold text-green-400">
+                  {totalJobs > 0 ? Math.round((completedJobs / totalJobs) * 100) : 0}%
+                </span>
               </div>
-              <div className="flex justify-between items-center p-2 glass rounded">
-                <span className="text-gray-300">On-Time Rate</span>
-                <span className="font-bold text-green-400">95%</span>
-              </div>
-              <div className="flex justify-between items-center p-2 glass rounded">
-                <span className="text-gray-300">Customer Rating</span>
-                <span className="font-bold text-yellow-400">4.8★</span>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Status</span>
+                <span className={`font-bold ${clockedIn ? 'text-green-400' : 'text-gray-400'}`}>
+                  {clockedIn ? 'Working' : 'Off Duty'}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Quick Actions */}
+          {/* Contact Options */}
           <div className="glass card-modern rounded-xl p-4">
-            <h3 className="font-bold text-gray-100 mb-3">Quick Actions</h3>
+            <h3 className="font-semibold text-gray-100 mb-3">Quick Actions</h3>
             <div className="space-y-2">
-              <button className="w-full py-3 bg-blue-500/20 text-blue-400 rounded-lg font-medium border border-blue-500/30">
+              <button className="w-full py-3 glass text-gray-300 rounded-lg font-medium hover:bg-white/10">
                 <Phone className="inline mr-2" size={18} />
                 Contact Supervisor
               </button>
-              <button className="w-full py-3 glass text-gray-300 rounded-lg font-medium">
-                <Camera className="inline mr-2" size={18} />
-                Submit Photo Report
-              </button>
-              <button className="w-full py-3 btn-gradient-primary rounded-lg font-medium">
-                <Star className="inline mr-2" size={18} />
-                View Performance Goals
+              <button className="w-full py-3 glass text-gray-300 rounded-lg font-medium hover:bg-white/10">
+                Report Issue
               </button>
             </div>
           </div>
