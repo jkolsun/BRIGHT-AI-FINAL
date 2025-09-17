@@ -150,10 +150,76 @@ body {
   color: #ef4444 !important;
 }
 
-/* Mobile-specific styles */
+/* Mobile-specific improvements */
 @media (max-width: 768px) {
-  .mobile-glass {
-    background: rgba(15, 23, 42, 0.95) !important;
-    backdrop-filter: blur(20px);
+  /* Bigger touch targets */
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* More spacing in cards */
+  .card-modern {
+    padding: 1.25rem !important;
+  }
+
+  /* Bigger text for readability */
+  .text-xs {
+    font-size: 0.8125rem !important; /* Slightly bigger than xs */
+  }
+
+  .text-sm {
+    font-size: 0.9375rem !important; /* Slightly bigger than sm */
+  }
+
+  /* Better spacing between elements */
+  .space-y-2 > * + * {
+    margin-top: 0.75rem !important;
+  }
+
+  .space-y-3 > * + * {
+    margin-top: 1rem !important;
+  }
+
+  .space-y-4 > * + * {
+    margin-top: 1.25rem !important;
+  }
+
+  /* Adjust grid gaps on mobile */
+  .gap-2 {
+    gap: 0.75rem !important;
+  }
+
+  .gap-3 {
+    gap: 1rem !important;
+  }
+
+  .gap-4 {
+    gap: 1.25rem !important;
+  }
+
+  /* Make input fields bigger */
+  input, select, textarea {
+    padding: 0.75rem !important;
+    font-size: 16px !important; /* Prevents zoom on iOS */
+  }
+
+  /* Fix the main container padding */
+  .p-6 {
+    padding: 1rem !important;
+  }
+}
+
+/* Specific fixes for weather cards */
+.weather-forecast-card {
+  min-height: 120px;
+  padding: 1rem !important;
+}
+
+/* Fix for calendar on mobile - make it scrollable */
+@media (max-width: 768px) {
+  .calendar-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }

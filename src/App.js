@@ -4,7 +4,7 @@ import {
   CheckCircle, Bell, Camera, Send, Navigation, Star, TrendingUp, 
   Zap, Phone, RefreshCw, ChevronLeft, Home, Briefcase, 
   Activity, LogOut, ChevronRight, Filter, Download, Edit, Loader,
-  Mic, MicOff, Cloud, CloudRain, Sun, Bot, Cpu, AlertCircle
+  Mic, MicOff, Cloud, CloudRain, Sun, Bot, Cpu, AlertCircle, Menu, X
 } from 'lucide-react';
 
 // Import services
@@ -37,12 +37,31 @@ const weatherService = new WeatherService();
 function AdminApp() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(false);
+
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+   console.log('Window width:', window.innerWidth);
+  console.log('isMobile:', isMobile);
   
   // Real data states
   const [jobs, setJobs] = useState([]);
   const [quotes, setQuotes] = useState([]);
   const [messages, setMessages] = useState([]);
   const [crewMembers, setCrewMembers] = useState([]);
+
+ useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Fetch data from Supabase
   useEffect(() => {
@@ -88,8 +107,15 @@ function AdminApp() {
     return false;
   };
 
+   const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    if (isMobile) {
+      setMobileMenuOpen(false);
+    }
+  };
+
   // UPDATED DASHBOARDVIEW WITH AI STATUS DASHBOARD
-  const DashboardView = () => {
+   const DashboardView = ({ isMobile }) => {
     const [jobFilter, setJobFilter] = useState('today');
     const [showImportModal, setShowImportModal] = useState(false);
     const [importType, setImportType] = useState('jobs');
@@ -196,7 +222,7 @@ function AdminApp() {
           </div>
         )}
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className={`grid ${isMobile ? 'grid-cols-2 gap-3' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4'}`}>
           <button 
             onClick={() => setActiveTab('scheduling')}
             className="glass card-modern rounded-xl p-6 cursor-pointer"
@@ -331,7 +357,7 @@ function AdminApp() {
     );
   };
 
-const SchedulingView = () => {
+const SchedulingView = ({ isMobile }) => {
   const [newJob, setNewJob] = useState({
     customer: '',
     type: '',
@@ -431,7 +457,7 @@ const SchedulingView = () => {
   };
   
   // Calendar View Component
-  const CalendarView = () => (
+  const CalendarView = ({ isMobile }) => (
     <div className="glass card-modern rounded-xl p-6">
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
@@ -481,83 +507,122 @@ const SchedulingView = () => {
       </div>
       
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-2">
-        {weekDates.map((date, index) => {
-          const dayJobs = getJobsByDate(date);
-          const isToday = date.toDateString() === new Date().toDateString();
-          const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-          const dayNum = date.getDate();
-          
-          return (
-            <div 
-              key={index} 
-              className={`glass rounded-lg p-3 min-h-[200px] ${
-                isToday ? 'ring-2 ring-green-400/50' : ''
-              }`}
-            >
-              <div className="text-center mb-2">
-                <div className={`text-xs font-medium ${
-                  isToday ? 'text-green-400' : 'text-gray-400'
-                }`}>
-                  {dayName}
-                </div>
-                <div className={`text-lg font-bold ${
-                  isToday ? 'text-green-400' : 'text-gray-100'
-                }`}>
-                  {dayNum}
-                </div>
-              </div>
-              
-              <div className="space-y-1">
-                {dayJobs.length === 0 ? (
-                  <div className="text-xs text-gray-500 text-center py-4">
-                    No jobs scheduled
-                  </div>
-                ) : (
-                  dayJobs.slice(0, 3).map((job, jobIndex) => {
-                    const colors = teamColors[job.crew] || teamColors['Team Alpha'];
-                    return (
-                      <div 
-                        key={jobIndex}
-                        className={`p-2 rounded text-xs ${colors.bg} ${colors.border} border cursor-pointer hover:scale-105 transition-transform`}
-                        title={`${job.customer} - ${job.type}`}
-                      >
-                        <div className="font-medium text-gray-100 truncate">
-                          {job.time || '9:00'} - {job.customer}
-                        </div>
-                        <div className={`text-xs ${colors.text} truncate`}>
-                          {job.crew}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-                {dayJobs.length > 3 && (
-                  <div className="text-xs text-gray-400 text-center">
-                    +{dayJobs.length - 3} more
-                  </div>
-                )}
-              </div>
-              
-              {/* Day Statistics */}
-              <div className="mt-auto pt-2 border-t border-white/10">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Jobs</span>
-                  <span className="text-gray-300 font-medium">{dayJobs.length}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Revenue</span>
-                  <span className="text-green-400 font-medium">
-                    ${dayJobs.reduce((sum, job) => {
-                      return sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0);
-                    }, 0)}
-                  </span>
-                </div>
-              </div>
+<div className={isMobile ? 'space-y-3' : 'grid grid-cols-7 gap-2'}>
+  {weekDates.map((date, index) => {
+    const dayJobs = getJobsByDate(date);
+    const isToday = date.toDateString() === new Date().toDateString();
+    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+    const dayNum = date.getDate();
+    
+    // Mobile view - simplified cards
+    if (isMobile) {
+      return (
+        <div 
+          key={index} 
+          className={`glass rounded-lg p-4 ${isToday ? 'ring-2 ring-green-400/50' : ''}`}
+        >
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <span className={`font-bold ${isToday ? 'text-green-400' : 'text-gray-100'}`}>
+                {dayName} {dayNum}
+              </span>
             </div>
-          );
-        })}
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-gray-400">{dayJobs.length} jobs</span>
+              <span className="text-green-400 font-bold">
+                ${dayJobs.reduce((sum, job) => sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0), 0)}
+              </span>
+            </div>
+          </div>
+          {dayJobs.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {dayJobs.slice(0, 2).map((job, idx) => (
+                <div key={idx} className="text-xs text-gray-400 pl-3 border-l-2 border-gray-600">
+                  {job.time || '9:00'} - {job.customer}
+                </div>
+              ))}
+              {dayJobs.length > 2 && (
+                <div className="text-xs text-gray-500 pl-3">
+                  +{dayJobs.length - 2} more
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    // Desktop view - YOUR EXISTING CODE
+    return (
+      <div 
+        key={index} 
+        className={`glass rounded-lg p-3 min-h-[200px] ${
+          isToday ? 'ring-2 ring-green-400/50' : ''
+        }`}
+      >
+        {/* PASTE YOUR EXISTING DESKTOP CODE HERE - lines 15-72 from your snippet */}
+        <div className="text-center mb-2">
+          <div className={`text-xs font-medium ${
+            isToday ? 'text-green-400' : 'text-gray-400'
+          }`}>
+            {dayName}
+          </div>
+          <div className={`text-lg font-bold ${
+            isToday ? 'text-green-400' : 'text-gray-100'
+          }`}>
+            {dayNum}
+          </div>
+        </div>
+        
+        <div className="space-y-1">
+          {dayJobs.length === 0 ? (
+            <div className="text-xs text-gray-500 text-center py-4">
+              No jobs scheduled
+            </div>
+          ) : (
+            dayJobs.slice(0, 3).map((job, jobIndex) => {
+              const colors = teamColors[job.crew] || teamColors['Team Alpha'];
+              return (
+                <div 
+                  key={jobIndex}
+                  className={`p-2 rounded text-xs ${colors.bg} ${colors.border} border cursor-pointer hover:scale-105 transition-transform`}
+                  title={`${job.customer} - ${job.type}`}
+                >
+                  <div className="font-medium text-gray-100 truncate">
+                    {job.time || '9:00'} - {job.customer}
+                  </div>
+                  <div className={`text-xs ${colors.text} truncate`}>
+                    {job.crew}
+                  </div>
+                </div>
+              );
+            })
+          )}
+          {dayJobs.length > 3 && (
+            <div className="text-xs text-gray-400 text-center">
+              +{dayJobs.length - 3} more
+            </div>
+          )}
+        </div>
+        
+        <div className="mt-auto pt-2 border-t border-white/10">
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-500">Jobs</span>
+            <span className="text-gray-300 font-medium">{dayJobs.length}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-500">Revenue</span>
+            <span className="text-green-400 font-medium">
+              ${dayJobs.reduce((sum, job) => {
+                return sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0);
+              }, 0)}
+            </span>
+          </div>
+        </div>
       </div>
+    );
+  })}
+</div>
       
       {/* Week Summary */}
       <div className="mt-6 p-4 glass rounded-lg">
@@ -727,10 +792,10 @@ const SchedulingView = () => {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className={isMobile ? 'space-y-4' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
         {/* Main Content Area */}
-        <div className="lg:col-span-2">
-          {viewMode === 'calendar' && <CalendarView />}
+        <div className={isMobile ? 'w-full' : 'lg:col-span-2'}>
+          {viewMode === 'calendar' && <CalendarView isMobile={isMobile} />}
           {viewMode === 'team' && <TeamView />}
           {viewMode === 'list' && (
             <div className="glass card-modern rounded-xl p-6">
@@ -919,10 +984,10 @@ const SchedulingView = () => {
   );
 };
 
-const QuotesView = () => (
-    <div className="p-6 space-y-6">
+const QuotesView = ({ isMobile }) => (
+      <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold text-gray-100 gradient-text">Quotes Management</h1>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={isMobile ? 'space-y-4' : 'grid grid-cols-1 lg:grid-cols-2 gap-6'}>
         <div className="glass card-modern rounded-xl p-6">
           <h3 className="font-semibold text-gray-100 mb-4">Pending Quotes ({quotes.length})</h3>
           <div className="space-y-3">
@@ -967,7 +1032,7 @@ const QuotesView = () => (
     </div>
   );
 
-const MessagesView = () => {
+const MessagesView = ({ isMobile }) => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1161,7 +1226,7 @@ const MessagesView = () => {
       </div>
 
       {/* Filter Tabs */}
-      <div className="glass rounded-xl p-1 flex gap-1">
+      <div className={`glass rounded-xl p-1 ${isMobile ? 'grid grid-cols-2 gap-2 p-2' : 'flex gap-1'}`}>
         {[
           { id: 'all', label: 'All Messages', count: messages.length, icon: MessageSquare },
           { id: 'processed', label: 'AI Processed', count: processedMessages.length, icon: CheckCircle2 },
@@ -1190,7 +1255,7 @@ const MessagesView = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={isMobile ? 'space-y-4' : 'grid grid-cols-1 lg:grid-cols-2 gap-6'}>
         {/* AI Processed Section */}
         <div className="glass card-modern rounded-xl">
           <div className="p-4 border-b border-white/10 bg-gradient-to-r from-green-500/10 to-blue-500/10">
@@ -1366,11 +1431,11 @@ const MessagesView = () => {
   );
 };
 
-  const CrewManagementView = () => (
+  const CrewManagementView = ({ isMobile }) => (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold text-gray-100 gradient-text">Crew Management</h1>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 glass card-modern rounded-xl p-6">
+      <div className={isMobile ? 'space-y-4' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
+        <div className={`${isMobile ? 'w-full' : 'lg:col-span-2'} glass card-modern rounded-xl p-6`}>
           <h3 className="font-semibold text-gray-100 mb-4">Team Members ({crewMembers.length})</h3>
           <div className="space-y-3">
             {crewMembers.map(member => (
@@ -1441,7 +1506,22 @@ const MessagesView = () => {
 
   return (
     <div className="flex h-screen">
-      <div className="w-64 glass-dark">
+      {/* ADD: Mobile Menu Button */}
+      {isMobile && (
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="fixed top-4 left-4 z-50 p-2 bg-gray-800 rounded-lg text-white shadow-lg"
+        >
+          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+      )}
+
+      {/* MODIFY: Make sidebar responsive */}
+      <div className={`
+        ${isMobile ? 'fixed inset-y-0 left-0 z-40' : 'relative'}
+        ${isMobile && !mobileMenuOpen ? '-translate-x-full' : 'translate-x-0'}
+        w-64 glass-dark transition-transform duration-300 ease-in-out
+      `}>
         <div className="p-6 border-b border-white/10">
           <h1 className="text-xl font-bold gradient-text">🌱 Bright.AI</h1>
           <p className="text-sm text-gray-400">Admin Dashboard</p>
@@ -1450,7 +1530,7 @@ const MessagesView = () => {
           {adminTabs.map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg transition-colors ${
                 activeTab === tab.id 
                   ? 'bg-green-500/20 text-green-400 border border-green-400/30' 
@@ -1463,16 +1543,40 @@ const MessagesView = () => {
           ))}
         </nav>
       </div>
-      <div className="flex-1 overflow-auto">
-        {activeTab === 'dashboard' && <DashboardView />}
-        {activeTab === 'scheduling' && <SchedulingView />}
-        {activeTab === 'quotes' && <QuotesView />}
-        {activeTab === 'messages' && <MessagesView />}
-        {activeTab === 'crew' && <CrewManagementView />}
-        {activeTab === 'schedule' && <AutoScheduleOptimizer />}
-        {activeTab === 'messages' && <CustomerResponseSystem />}
-        {activeTab === 'weather' && <WeatherIntelligence />}
-        {activeTab === 'predictive' && <PredictiveMaintenance />}
+
+       {/* ADD: Mobile Overlay */}
+      {isMobile && mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-30"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+<div className={`flex-1 overflow-auto ${isMobile ? 'w-full' : ''}`}>
+        {/* Mobile Header */}
+        {isMobile && (
+          <div className="bg-gray-800 p-4 pl-14 flex items-center justify-between sticky top-0 z-20">
+            <h2 className="text-lg font-semibold text-white">
+              {adminTabs.find(t => t.id === activeTab)?.label}
+            </h2>
+            <button
+              onClick={fetchAllData}
+              className="p-2 text-gray-400 hover:text-white"
+            >
+              <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+        )}
+        
+        {/* Wrap content with padding on mobile */}
+        <div className={isMobile ? 'pb-20' : ''}>
+          {activeTab === 'dashboard' && <DashboardView isMobile={isMobile} />}
+          {activeTab === 'scheduling' && <SchedulingView isMobile={isMobile} />}
+          {activeTab === 'quotes' && <QuotesView isMobile={isMobile} />}
+          {activeTab === 'messages' && <MessagesView isMobile={isMobile} />}
+          {activeTab === 'crew' && <CrewManagementView isMobile={isMobile} />}
+          {activeTab === 'weather' && <WeatherIntelligence isMobile={isMobile} />}
+          {activeTab === 'predictive' && <PredictiveMaintenance isMobile={isMobile} />}
+       </div>
       </div>
     </div>
   );

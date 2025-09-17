@@ -26,7 +26,7 @@ export class N8NAutomation {
     }
 
     if (!data.customers || !Array.isArray(data.customers)) {
-      errors.push('Customers must be an array');
+      errors.push('Customers must be an array');6
     } else if (data.customers.length === 0) {
       errors.push('No customers to process');
     } else {
