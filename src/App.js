@@ -12,6 +12,8 @@ import { supabase } from './services/database/supabase';
 import { OpenAIService } from './services/ai/openai';
 import { VoiceCommandService } from './services/ai/voiceCommands';
 import { WeatherService } from './services/ai/weatherService';
+import { Lock, User, Shield, Eye, EyeOff, Info } from 'lucide-react';
+import { authService } from './services/auth/authService';
 
 // Import components
 import SmartImportModal from './components/SmartImportModal';
@@ -26,12 +28,259 @@ import AutoScheduleOptimizer from './components/Schedule/AutoScheduleOptimizer';
 import CustomerResponseSystem from './components/Messages/CustomerResponseSystem';
 import WeatherIntelligence from './components/Weather/WeatherIntelligence';
 import PredictiveMaintenance from './components/Maintenance/PredictiveMaintenance';
+import CrewManagementPanel from './components/CrewManagementPanel';
 
 
 // Initialize services
 const ai = new OpenAIService();
 const voiceService = new VoiceCommandService();
 const weatherService = new WeatherService();
+
+// 2. ADD THIS LOGIN COMPONENT (add before your AdminApp function):
+function LoginScreen({ onLoginSuccess, onSwitchToSetup }) {
+  const [loginType, setLoginType] = useState('admin'); // 'admin' or 'crew'
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [crewId, setCrewId] = useState('');
+  const [crewPin, setCrewPin] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleAdminLogin = async (e) => {
+  e.preventDefault();
+  setLoading(true);
+  setError('');
+
+  try {
+    // FIRST: Find admin's company
+    const response = await fetch(
+      `${supabase.url}/rest/v1/admin_accounts?email=eq.${adminEmail}`,
+      { headers: supabase.headers }
+    );
+    
+    if (response.ok) {
+      const admins = await response.json();
+      if (admins && admins.length > 0 && admins[0].company_id) {
+        // Set company context BEFORE login
+        localStorage.setItem('currentCompanyId', admins[0].company_id);
+      }
+    }
+    
+    // THEN: Proceed with login
+    const result = await authService.loginAdmin(adminEmail, adminPassword);
+    
+    if (result.success) {
+      onLoginSuccess(result.data);
+    } else {
+      setError(result.error || 'Login failed');
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    setError('Login failed. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
+
+  const handleCrewLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    const result = await authService.loginCrew(crewId.toUpperCase(), crewPin);
+    
+    if (result.success) {
+      onLoginSuccess(result.data);
+    } else {
+      setError(result.error || 'Login failed');
+    }
+    setLoading(false);
+  };
+
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-emerald-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Logo and Title */}
+        <div className="text-center mb-8">
+          <div className="inline-block p-4 glass rounded-full mb-4">
+            <div className="text-3xl font-bold text-white">BRIGHT</div>
+            <div className="text-xs text-green-200">LANDSCAPING AI</div>
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-2">Bright.AI</h1>
+          <p className="text-green-200">Landscaping Intelligence Platform</p>
+        </div>
+
+        {/* Login Card */}
+        <div className="glass backdrop-blur-lg bg-white/10 rounded-2xl p-6 shadow-2xl border border-white/20">
+          {/* Login Type Tabs */}
+          <div className="flex rounded-lg glass p-1 mb-6">
+            <button
+              onClick={() => { setLoginType('admin'); setError(''); }}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md transition-all ${
+                loginType === 'admin' 
+                  ? 'bg-green-500/30 text-white border border-green-400/50' 
+                  : 'text-green-200 hover:text-white'
+              }`}
+            >
+              <Shield size={18} />
+              <span className="font-semibold">Admin</span>
+            </button>
+            <button
+              onClick={() => { setLoginType('crew'); setError(''); }}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md transition-all ${
+                loginType === 'crew' 
+                  ? 'bg-blue-500/30 text-white border border-blue-400/50' 
+                  : 'text-green-200 hover:text-white'
+              }`}
+            >
+              <User size={18} />
+              <span className="font-semibold">Crew</span>
+            </button>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-500/20 border border-red-400/50 rounded-lg text-red-200 text-sm">
+              {error}
+            </div>
+          )}
+
+          {/* Admin Login Form */}
+          {loginType === 'admin' && (
+            <form onSubmit={handleAdminLogin}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-green-200 text-sm font-medium mb-2">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-green-200/50 focus:outline-none focus:border-green-400 transition-all"
+                    placeholder="admin@company.com"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-green-200 text-sm font-medium mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-green-200/50 focus:outline-none focus:border-green-400 transition-all pr-12"
+                      placeholder="Enter password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-200 hover:text-white"
+                    >
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full mt-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold rounded-lg transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader className="animate-spin" size={20} />
+                    <span>Logging in...</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock size={20} />
+                    <span>Login as Admin</span>
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* Crew Login Form */}
+          {loginType === 'crew' && (
+            <form onSubmit={handleCrewLogin}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-green-200 text-sm font-medium mb-2">
+                    Employee ID
+                  </label>
+                  <input
+                    type="text"
+                    value={crewId}
+                    onChange={(e) => setCrewId(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-green-200/50 focus:outline-none focus:border-blue-400 transition-all uppercase"
+                    placeholder="EMP001"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-green-200 text-sm font-medium mb-2">
+                    PIN Code
+                  </label>
+                  <input
+  type="tel"
+  inputMode="numeric"
+  pattern="[0-9]{4}"
+  value={crewPin}
+  onChange={(e) => setCrewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+  className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-lg text-white text-center text-2xl tracking-widest placeholder-green-200/50 focus:outline-none focus:border-blue-400 transition-all"
+  placeholder="• • • •"
+  maxLength="4"
+  required
+/>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full mt-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-semibold rounded-lg transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader className="animate-spin" size={20} />
+                    <span>Logging in...</span>
+                  </>
+                ) : (
+                  <>
+                    <User size={20} />
+                    <span>Login as Crew</span>
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+       </div>
+        
+        {/* Add Create Account Link */}
+        <div className="text-center mt-4">
+          <p className="text-green-200 text-sm">
+            Don't have an account?{' '}
+            <button
+              onClick={onSwitchToSetup}
+              className="text-white underline hover:text-green-100"
+            >
+              Create one here
+            </button>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 // Admin App Component
 function AdminApp() {
@@ -1428,76 +1677,15 @@ const MessagesView = ({ isMobile }) => {
   );
 };
 
-  const CrewManagementView = ({ isMobile }) => (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-gray-100 gradient-text">Crew Management</h1>
-      <div className={isMobile ? 'space-y-4' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
-        <div className={`${isMobile ? 'w-full' : 'lg:col-span-2'} glass card-modern rounded-xl p-6`}>
-          <h3 className="font-semibold text-gray-100 mb-4">Team Members ({crewMembers.length})</h3>
-          <div className="space-y-3">
-            {crewMembers.map(member => (
-              <div key={member.id} className="flex justify-between items-center p-4 glass rounded-lg">
-                <div>
-                  <h4 className="font-medium text-gray-100">{member.name}</h4>
-                  <p className="text-sm text-gray-400">{member.team}</p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-center">
-                    <p className="text-sm text-gray-400">Hours</p>
-                    <p className="font-semibold text-gray-100">{member.hours}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-gray-400">Rating</p>
-                    <div className="flex items-center gap-1">
-                      <Star className="text-yellow-400 fill-current" size={14} />
-                      <span className="font-semibold text-gray-100">{member.rating}</span>
-                    </div>
-                  </div>
-                  <button className="px-3 py-1 text-sm glass text-gray-300 rounded hover:bg-white/10">
-                    View Details
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="glass card-modern rounded-xl p-6">
-          <h3 className="font-semibold text-gray-100 mb-4">Team Stats</h3>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-400">Total Active</p>
-              <p className="text-2xl font-bold text-gray-100">{crewMembers.length} members</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Average Rating</p>
-              <p className="text-2xl font-bold text-yellow-400">
-                {crewMembers.length > 0 
-                  ? (crewMembers.reduce((acc, member) => acc + parseFloat(member.rating), 0) / crewMembers.length).toFixed(1) 
-                  : '0.0'} ★
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-400">Avg Productivity</p>
-              <p className="text-2xl font-bold gradient-text">
-                {crewMembers.length > 0 
-                  ? Math.round(crewMembers.reduce((acc, member) => acc + member.productivity, 0) / crewMembers.length)
-                  : 0}%
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
   const adminTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'scheduling', label: 'Job Scheduling', icon: Calendar },
     { id: 'quotes', label: 'Quotes', icon: DollarSign },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
-    { id: 'crew', label: 'Crew Management', icon: Users },
+    { id: 'crew_accounts', label: 'Crew Management', icon: Shield },
     { id: 'weather', label: 'Weather AI', icon: Cloud },
     { id: 'predictive', label: 'Predictive AI', icon: TrendingUp },
+    
 
   ];
 
@@ -1573,6 +1761,7 @@ const MessagesView = ({ isMobile }) => {
           {activeTab === 'crew' && <CrewManagementView isMobile={isMobile} />}
           {activeTab === 'weather' && <WeatherIntelligence isMobile={isMobile} />}
           {activeTab === 'predictive' && <PredictiveMaintenance isMobile={isMobile} />}
+          {activeTab === 'crew_accounts' && <CrewManagementPanel isMobile={isMobile}/>}
        </div>
       </div>
     </div>
@@ -2085,40 +2274,364 @@ function CrewApp() {
   );
 }
 
-// Main App Component
-function BrightAIApp() {
-  const [currentView, setCurrentView] = useState('admin');
+// First-Time Setup Component
+function FirstTimeSetup({ onSetupComplete, onSwitchToLogin }) {
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [setupData, setSetupData] = useState({
+    companyName: '',
+    adminEmail: '',
+    adminPassword: '',
+    confirmPassword: ''
+  });
+
+  const handleSetup = async () => {
+  if (!setupData.companyName || !setupData.adminEmail || !setupData.adminPassword) {
+    setError('Please fill in all fields');
+    return;
+  }
+
+  if (setupData.adminPassword !== setupData.confirmPassword) {
+    setError('Passwords do not match');
+    return;
+  }
+
+  if (setupData.adminPassword.length < 6) {
+    setError('Password must be at least 6 characters');
+    return;
+  }
+
+  setLoading(true);
+  setError('');
+
+  try {
+    // Generate unique company ID
+    const companyId = 'company_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    
+    // Set company context
+    localStorage.setItem('currentCompanyId', companyId);
+    
+    // Create company in Supabase
+    const companyData = {
+      id: companyId,
+      name: setupData.companyName,
+      email: setupData.adminEmail,
+      subscription_plan: 'trial',
+      subscription_status: 'active',
+      trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+    };
+    
+    await supabase.insertData('companies', companyData);
+    
+    // Create admin account
+    const adminData = {
+      email: setupData.adminEmail,
+      password_hash: btoa(setupData.adminPassword),
+      company_name: setupData.companyName,
+      company_id: companyId,
+      role: 'admin',
+      is_active: true
+    };
+    
+    await supabase.insertData('admin_accounts', adminData);
+    
+    // Wait a moment for database to sync
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Try to auto-login
+    const loginResult = await authService.loginAdmin(
+      setupData.adminEmail,
+      setupData.adminPassword
+    );
+
+    if (loginResult.success) {
+      onSetupComplete(loginResult.data);
+    } else {
+      // If auto-login fails, show success message and redirect to login
+      alert('Account created successfully! Please login with your credentials.');
+      window.location.reload();
+    }
+  } catch (err) {
+    console.error('Setup error:', err);
+    setError('Setup failed. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+  };
 
   return (
-    <div className="min-h-screen">
-      <div className="fixed top-4 right-4 z-50">
-        <div className="glass rounded-lg p-2 flex gap-2">
-          <button
-            onClick={() => setCurrentView('admin')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              currentView === 'admin'
-                ? 'bg-green-500/20 text-green-400 border border-green-400/30'
-                : 'text-gray-400 hover:bg-white/10'
-            }`}
-          >
-            👨‍💼 Admin
-          </button>
-          <button
-            onClick={() => setCurrentView('crew')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              currentView === 'crew'
-                ? 'bg-blue-500/20 text-blue-400 border border-blue-400/30'
-                : 'text-gray-400 hover:bg-white/10'
-            }`}
-          >
-            🚛 Crew
-          </button>
+    <div className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-emerald-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="inline-block p-4 glass rounded-full mb-4">
+            <div className="text-3xl font-bold text-white">BRIGHT</div>
+            <div className="text-xs text-green-200">LANDSCAPING AI</div>
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-2">Welcome to Bright.AI</h1>
+          <p className="text-green-200">Let's set up your landscaping business</p>
         </div>
-      </div>
 
-      {currentView === 'admin' ? <AdminApp /> : <CrewApp />}
+        <div className="glass backdrop-blur-lg bg-white/10 rounded-2xl p-6 shadow-2xl border border-white/20">
+          {step === 1 ? (
+            <>
+              <h2 className="text-xl font-semibold text-white mb-6">Company Setup</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-green-200 text-sm font-medium mb-2">
+                    Company Name
+                  </label>
+                  <input
+                    type="text"
+                    value={setupData.companyName}
+                    onChange={(e) => setSetupData({ ...setupData, companyName: e.target.value })}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-green-200/50 focus:outline-none focus:border-green-400"
+                    placeholder="Bright Landscaping LLC"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    if (setupData.companyName) {
+                      setStep(2);
+                      setError('');
+                    } else {
+                      setError('Please enter your company name');
+                    }
+                  }}
+                  className="w-full py-3 btn-gradient-primary rounded-lg font-semibold"
+                >
+                  Next: Create Admin Account
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="text-xl font-semibold text-white mb-6">Admin Account</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-green-200 text-sm font-medium mb-2">
+                    Admin Email
+                  </label>
+                  <input
+                    type="email"
+                    value={setupData.adminEmail}
+                    onChange={(e) => setSetupData({ ...setupData, adminEmail: e.target.value })}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-green-200/50 focus:outline-none focus:border-green-400"
+                    placeholder="admin@company.com"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-green-200 text-sm font-medium mb-2">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={setupData.adminPassword}
+                    onChange={(e) => setSetupData({ ...setupData, adminPassword: e.target.value })}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-green-200/50 focus:outline-none focus:border-green-400"
+                    placeholder="Minimum 6 characters"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-green-200 text-sm font-medium mb-2">
+                    Confirm Password
+                  </label>
+                  <input
+                    type="password"
+                    value={setupData.confirmPassword}
+                    onChange={(e) => setSetupData({ ...setupData, confirmPassword: e.target.value })}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-green-200/50 focus:outline-none focus:border-green-400"
+                    placeholder="Re-enter password"
+                  />
+                </div>
+
+                {error && (
+                  <div className="p-3 bg-red-500/20 border border-red-400/50 rounded-lg text-red-200 text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setStep(1)}
+                    className="flex-1 py-3 glass text-gray-300 rounded-lg font-semibold hover:bg-white/10"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleSetup}
+                    disabled={loading}
+                    className="flex-1 py-3 btn-gradient-primary rounded-lg font-semibold"
+                  >
+                    {loading ? 'Setting up...' : 'Complete Setup'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+       </div>
+        
+        {/* Add login link */}
+        <div className="text-center mt-4">
+  <button
+    type="button"
+    onClick={() => {
+      localStorage.setItem('showLogin', 'true')
+      window.location.reload();
+    }}
+    className="text-green-200 hover:text-white underline text-base p-3"
+  >
+    Already have an account? Login here
+  </button>
+</div>
+      </div>
     </div>
   );
 }
 
+
+// Main App Component
+function BrightAIApp() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isFirstTimeSetup, setIsFirstTimeSetup] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
+
+  // Check for existing session on mount
+  useEffect(() => {
+  const initAuth = async () => {
+    // Check if user wants to skip setup
+    const forceLogin = localStorage.getItem('forceLogin');
+    if (forceLogin === 'true') {
+      setIsFirstTimeSetup(false);
+      setShowSetup(false);
+      localStorage.removeItem('forceLogin');
+      setLoading(false);
+      return;
+    }
+
+    // Normal auth check
+    const authData = await authService.init();
+    if (authData) {
+      setIsAuthenticated(true);
+      setUserRole(authData.role);
+      setCurrentUser(authData.user);
+    } else {
+      const needsSetup = await authService.checkFirstTimeSetup();
+      setIsFirstTimeSetup(needsSetup);
+    }
+    setLoading(false);
+  };
+  initAuth();
+}, []);
+
+  const handleLoginSuccess = (authData) => {
+    setIsAuthenticated(true);
+    setUserRole(authData.role);
+    setCurrentUser(authData.user);
+  };
+
+  const handleLogout = () => {
+  authService.logout();
+  supabase.clearCompanyContext(); // ADD THIS LINE
+  localStorage.clear(); // Clear all localStorage
+  setIsAuthenticated(false);
+  setUserRole(null);
+  setCurrentUser(null);
+  window.location.reload(); // Force clean reload
+};
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-900 to-emerald-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="animate-spin text-white mb-4" size={48} />
+          <p className="text-white text-lg">Loading Bright.AI...</p>
+        </div>
+      </div>
+    );
+  }
+
+// Show setup or login based on state
+if (!isAuthenticated) {
+  // Check localStorage for what to show
+  const showLoginPage = localStorage.getItem('showLogin') === 'true';
+  
+  if (showLoginPage) {
+    return (
+      <LoginScreen 
+        onLoginSuccess={handleLoginSuccess}
+        onSwitchToSetup={() => {
+          localStorage.removeItem('showLogin');
+          window.location.reload();
+        }}
+      />
+    );
+  } else if (isFirstTimeSetup || showSetup) {
+    return (
+      <FirstTimeSetup 
+        onSetupComplete={handleLoginSuccess}
+        onSwitchToLogin={() => {
+          localStorage.setItem('showLogin', 'true');
+          window.location.reload();
+        }}
+      />
+    );
+  } else {
+    // Default to login if no setup needed
+    return (
+      <LoginScreen 
+        onLoginSuccess={handleLoginSuccess}
+        onSwitchToSetup={() => setShowSetup(true)}
+      />
+    );
+  }
+}
+  // Show appropriate app based on user role
+  if (userRole === 'admin') {
+    return (
+      <div className="min-h-screen">
+        {/* Add logout button in top-right */}
+        <div className="fixed top-4 right-4 z-50">
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 bg-red-500/20 text-red-400 border border-red-400/30 rounded-lg hover:bg-red-500/30 transition-all flex items-center gap-2"
+          >
+            <LogOut size={18} />
+            <span>Logout</span>
+          </button>
+        </div>
+        
+        {/* Your existing AdminApp component */}
+        <AdminApp />
+      </div>
+    );
+  } else if (userRole === 'crew') {
+    return (
+      <div className="min-h-screen">
+        {/* Add logout button for crew */}
+        <div className="fixed top-4 right-4 z-50">
+          <button
+            onClick={handleLogout}
+            className="px-3 py-2 glass text-white rounded-lg flex items-center gap-2"
+          >
+            <LogOut size={16} />
+            <span className="text-sm">Logout</span>
+          </button>
+        </div>
+        
+        {/* Your existing CrewApp component */}
+        <CrewApp />
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export default BrightAIApp;
+window.authService = authService;

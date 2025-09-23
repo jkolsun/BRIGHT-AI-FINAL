@@ -1,4 +1,5 @@
 // services/database/supabase.js
+// MULTI-TENANT VERSION
 
 const SUPABASE_URL = 'https://mgpwaxgfbmwouvcqbpxo.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ncHdheGdmYm13b3V2Y3FicHhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1NTAyMTgsImV4cCI6MjA3MzEyNjIxOH0.cMR6r1L-cCkHHDnFB7s3o0VKeNzZOlCWpVBvevux8rU';
@@ -14,10 +15,35 @@ class SupabaseClient {
     };
   }
 
-  // Fetch data from a table
+  // Get current company ID from localStorage
+  getCurrentCompanyId() {
+    const companyId = localStorage.getItem('currentCompanyId');
+    if (!companyId) {
+      console.warn('No company context set');
+    }
+    return companyId;
+  }
+
+  // Fetch data - automatically filters by company
   async fetchData(table, limit = 100) {
     try {
-      const response = await fetch(`${this.url}/rest/v1/${table}?limit=${limit}`, {
+      const companyId = this.getCurrentCompanyId();
+      
+      // These tables don't need company filtering
+      const globalTables = ['companies'];
+      
+      let url;
+      if (globalTables.includes(table)) {
+        url = `${this.url}/rest/v1/${table}?limit=${limit}`;
+      } else if (companyId) {
+        // Add company filter to all other tables
+        url = `${this.url}/rest/v1/${table}?company_id=eq.${companyId}&limit=${limit}`;
+      } else {
+        console.warn('No company context for table:', table);
+        return [];
+      }
+      
+      const response = await fetch(url, {
         headers: this.headers
       });
       
@@ -34,16 +60,23 @@ class SupabaseClient {
     }
   }
 
-  // Insert data into a table
+  // Insert data - automatically adds company_id
   async insertData(table, data) {
     try {
+      const companyId = this.getCurrentCompanyId();
+      
+      // Auto-add company_id except for companies table
+      const dataWithCompany = (table !== 'companies' && companyId) 
+        ? { ...data, company_id: companyId }
+        : data;
+      
       const response = await fetch(`${this.url}/rest/v1/${table}`, {
         method: 'POST',
         headers: {
           ...this.headers,
           'Prefer': 'return=representation'
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(dataWithCompany)
       });
       
       if (!response.ok) {
@@ -60,10 +93,17 @@ class SupabaseClient {
     }
   }
 
-  // Update data in a table
+  // Update data - validates company ownership
   async updateData(table, id, updates) {
     try {
-      const response = await fetch(`${this.url}/rest/v1/${table}?id=eq.${id}`, {
+      const companyId = this.getCurrentCompanyId();
+      
+      let url = `${this.url}/rest/v1/${table}?id=eq.${id}`;
+      if (companyId && table !== 'companies') {
+        url += `&company_id=eq.${companyId}`;
+      }
+      
+      const response = await fetch(url, {
         method: 'PATCH',
         headers: {
           ...this.headers,
@@ -85,10 +125,17 @@ class SupabaseClient {
     }
   }
 
-  // Delete data from a table
+  // Delete data
   async deleteData(table, id) {
     try {
-      const response = await fetch(`${this.url}/rest/v1/${table}?id=eq.${id}`, {
+      const companyId = this.getCurrentCompanyId();
+      
+      let url = `${this.url}/rest/v1/${table}?id=eq.${id}`;
+      if (companyId && table !== 'companies') {
+        url += `&company_id=eq.${companyId}`;
+      }
+      
+      const response = await fetch(url, {
         method: 'DELETE',
         headers: this.headers
       });
@@ -105,34 +152,10 @@ class SupabaseClient {
     }
   }
 
-  // Query data with filters
-  async queryData(table, filters = {}) {
-    try {
-      const queryParams = Object.entries(filters)
-        .map(([key, value]) => `${key}=eq.${value}`)
-        .join('&');
-      
-      const url = queryParams 
-        ? `${this.url}/rest/v1/${table}?${queryParams}`
-        : `${this.url}/rest/v1/${table}`;
-      
-      const response = await fetch(url, {
-        headers: this.headers
-      });
-      
-      if (!response.ok) {
-        console.error(`Error querying ${table}:`, response.status);
-        return [];
-      }
-      
-      const data = await response.json();
-      return data || [];
-    } catch (error) {
-      console.error(`Error querying ${table}:`, error);
-      return [];
-    }
+  // Clear company context on logout
+  clearCompanyContext() {
+    localStorage.removeItem('currentCompanyId');
   }
 }
 
-// Create and export the Supabase client instance
 export const supabase = new SupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
