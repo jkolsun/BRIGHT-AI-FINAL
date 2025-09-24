@@ -1758,7 +1758,7 @@ const MessagesView = ({ isMobile }) => {
           {activeTab === 'scheduling' && <SchedulingView isMobile={isMobile} />}
           {activeTab === 'quotes' && <QuotesView isMobile={isMobile} />}
           {activeTab === 'messages' && <MessagesView isMobile={isMobile} />}
-          {activeTab === 'crew' && <CrewManagementView isMobile={isMobile} />}
+          {activeTab === 'crew' && <CrewManagementPanel isMobile={isMobile} />}
           {activeTab === 'weather' && <WeatherIntelligence isMobile={isMobile} />}
           {activeTab === 'predictive' && <PredictiveMaintenance isMobile={isMobile} />}
           {activeTab === 'crew_accounts' && <CrewManagementPanel isMobile={isMobile}/>}
