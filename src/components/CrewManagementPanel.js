@@ -326,7 +326,7 @@ const CrewManagementPanel = ({ isMobile }) => {
     const newStatus = !currentStatus;
     const action = newStatus ? 'reactivate' : 'deactivate';
     
-    if (!confirm(`Are you sure you want to ${action} ${crewName}?`)) {
+    if (!window.confirm(`Are you sure you want to ${action} ${crewName}?`)) {
       return;
     }
 
@@ -461,7 +461,7 @@ const CrewManagementPanel = ({ isMobile }) => {
       return;
     }
     
-    if (!confirm(`Delete ${teamName}? Members will be moved to Unassigned.`)) {
+    if (window.confirm(`Delete ${teamName}? Members will be moved to Unassigned.`)) {
       return;
     }
     
