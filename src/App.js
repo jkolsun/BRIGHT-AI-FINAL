@@ -4,7 +4,8 @@ import {
   CheckCircle, Bell, Camera, Send, Navigation, Star, TrendingUp, 
   Zap, Phone, RefreshCw, ChevronLeft, Home, Briefcase, 
   Activity, LogOut, ChevronRight, Filter, Download, Edit, Loader,
-  Mic, MicOff, Cloud, CloudRain, Sun, Bot, Cpu, AlertCircle, Menu, X
+  Mic, MicOff, Cloud, CloudRain, Sun, Bot, Cpu, AlertCircle, Menu, X,
+  Mail
 } from 'lucide-react';
 
 // Import services
@@ -1768,32 +1769,67 @@ const MessagesView = ({ isMobile }) => {
   );
 }
 
-// Replace your existing CrewApp function in App.js with this simplified version
 
-// Replace your existing CrewApp function in App.js with this version that includes the map
 
-function CrewApp() {
+// Modified CrewApp with real user data and proper syncing
+function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
   const [activeView, setActiveView] = useState('menu');
   const [clockedIn, setClockedIn] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [jobsFilter, setJobsFilter] = useState('active'); // 'active' or 'completed'
+  const [jobsFilter, setJobsFilter] = useState('active');
   const [mapExpanded, setMapExpanded] = useState(false);
-  
-  // States for data
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
-  
+  const [userStats, setUserStats] = useState({
+    rating: 5.0,
+    totalHours: 0,
+    weeklyJobs: 0
+  });
+
+  // Load jobs and user data on mount
   useEffect(() => {
-    fetchJobs();
+    if (currentUser) {
+      fetchJobs();
+      loadUserData();
+    }
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [currentUser]);
+
+  // Load user's actual stats from database
+  const loadUserData = async () => {
+    try {
+      const crewData = await supabase.fetchData('crew_members');
+      const member = crewData.find(c => 
+        c.employee_id === currentUser?.employeeId || 
+        c.employeeId === currentUser?.employeeId ||
+        c.id === currentUser?.id
+      );
+      
+      if (member) {
+        setUserStats({
+          rating: member.rating || 5.0,
+          totalHours: member.hours_worked || 0,
+          weeklyJobs: member.jobs_completed || 0
+        });
+        setClockedIn(member.clock_status === 'clocked_in');
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    }
+  };
 
   const fetchJobs = async () => {
     setLoading(true);
     try {
       const jobsData = await supabase.fetchData('jobs');
-      setJobs(jobsData);
+      // Filter jobs for user's team
+      const teamJobs = jobsData.filter(job => 
+        job.crew === currentUser?.team || 
+        job.assigned_crew === currentUser?.team ||
+        job.status === 'Scheduled'
+      );
+      setJobs(teamJobs);
     } catch (error) {
       console.error('Error fetching jobs:', error);
     } finally {
@@ -1801,16 +1837,61 @@ function CrewApp() {
     }
   };
 
+  // Update job status with database sync
   const updateJobStatus = async (jobId, newStatus) => {
-    const updated = await supabase.updateData('jobs', jobId, { status: newStatus });
-    if (updated && updated.length > 0) {
-      setJobs(jobs.map(job => job.id === jobId ? { ...job, status: newStatus } : job));
-      return true;
+    try {
+      const result = await supabase.updateData('jobs', jobId, { 
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+        updated_by: currentUser?.employeeId
+      });
+      
+      if (result) {
+        setJobs(jobs.map(job => 
+          job.id === jobId ? { ...job, status: newStatus } : job
+        ));
+        
+        // Update user stats if job completed
+        if (newStatus === 'Completed') {
+          setUserStats(prev => ({
+            ...prev,
+            weeklyJobs: prev.weeklyJobs + 1
+          }));
+        }
+        return true;
+      }
+    } catch (error) {
+      console.error('Error updating job:', error);
     }
     return false;
   };
 
-  // Map Component
+  // Handle clock in/out with database sync
+  const handleClockInOut = async () => {
+    const newStatus = !clockedIn;
+    setClockedIn(newStatus);
+    
+    try {
+      const crewData = await supabase.fetchData('crew_members');
+      const member = crewData.find(c => 
+        c.employee_id === currentUser?.employeeId || 
+        c.id === currentUser?.id
+      );
+      
+      if (member) {
+        await supabase.updateData('crew_members', member.id, {
+          clock_status: newStatus ? 'clocked_in' : 'clocked_out',
+          last_clock: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('Error updating clock status:', error);
+      // Revert on error
+      setClockedIn(!newStatus);
+    }
+  };
+
+  // Map Component (keeping your existing map)
   const JobMap = ({ expanded = false }) => {
     const mapRef = React.useRef(null);
     const mapInstanceRef = React.useRef(null);
@@ -1846,7 +1927,7 @@ function CrewApp() {
           
           window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-          // Add job markers with different colors based on status
+          // Add job markers
           jobs.forEach((job, index) => {
             const baseLatLng = [40.7934, -77.8600];
             const offset = 0.015;
@@ -1863,7 +1944,6 @@ function CrewApp() {
               radius: expanded ? 8 : 6
             }).addTo(map);
             
-            // Add popup with job info
             marker.bindPopup(`
               <div style="min-width: 150px;">
                 <strong>${job.customer}</strong><br>
@@ -1874,7 +1954,7 @@ function CrewApp() {
             `);
           });
 
-          // Add current location marker
+          // Current location marker
           window.L.circleMarker([40.7934, -77.8600], {
             color: '#ef4444',
             fillColor: '#ef4444',
@@ -1905,13 +1985,15 @@ function CrewApp() {
     );
   };
 
-  // Simple Menu View
+  // Menu View - Updated with real user info
   const MenuView = () => (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <div className="px-6 py-8 text-center text-white">
         <h1 className="text-3xl font-bold mb-2 gradient-text">Bright.AI</h1>
-        <p className="text-green-300 mb-1">Team Alpha</p>
-        <p className="text-green-400 text-sm">Connected</p>
+        <p className="text-green-300 mb-1 font-semibold">{currentUser?.team || 'Team'}</p>
+        <p className="text-green-400 text-sm">
+          {clockedIn ? '🟢 Online' : '⚪ Offline'}
+        </p>
       </div>
 
       <div className="px-6 pb-8">
@@ -1923,6 +2005,11 @@ function CrewApp() {
             <Briefcase className="mx-auto mb-3 text-green-400" size={40} />
             <h2 className="text-xl font-bold text-gray-100 mb-1">WORK</h2>
             <p className="text-gray-400 text-sm">View jobs and clock in/out</p>
+            {jobs.filter(j => j.status !== 'Completed').length > 0 && (
+              <span className="inline-block mt-2 px-3 py-1 bg-yellow-500/20 rounded-full text-yellow-400 text-xs font-bold">
+                {jobs.filter(j => j.status !== 'Completed').length} Active
+              </span>
+            )}
           </button>
           
           <button 
@@ -1935,21 +2022,26 @@ function CrewApp() {
           </button>
         </div>
         
-        <button className="w-full mt-8 py-3 border-2 border-white/20 rounded-xl text-white font-medium hover:bg-white/10 transition-colors">
+        <button 
+          onClick={() => {
+            authService.logout();
+            window.location.reload();
+          }}
+          className="w-full mt-8 py-3 border-2 border-white/20 rounded-xl text-white font-medium hover:bg-white/10 transition-colors"
+        >
+          <LogOut className="inline mr-2" size={18} />
           Log Out
         </button>
       </div>
     </div>
   );
 
-  // Work View with Map
+  // Work View - Keep your existing layout with data sync
   const WorkView = () => {
-    // Calculate stats
     const completedJobs = jobs.filter(j => j.status === 'Completed').length;
     const activeJobs = jobs.filter(j => j.status === 'In Progress').length;
     const scheduledJobs = jobs.filter(j => j.status === 'Scheduled').length;
     
-    // Filter jobs based on current filter
     const displayJobs = jobsFilter === 'active' 
       ? jobs.filter(job => job.status === 'Scheduled' || job.status === 'In Progress')
       : jobs.filter(job => job.status === 'Completed');
@@ -1971,7 +2063,6 @@ function CrewApp() {
             <JobMap expanded={true} />
           </div>
           
-          {/* Map Legend */}
           <div className="absolute bottom-4 left-4 glass rounded-lg p-3 text-xs">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -1998,7 +2089,7 @@ function CrewApp() {
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white pb-4">
-        {/* Header */}
+        {/* Header with real user info */}
         <div className="glass-dark sticky top-0 z-20">
           <div className="px-4 py-3 flex items-center justify-between">
             <button onClick={() => setActiveView('menu')} className="p-2">
@@ -2006,7 +2097,7 @@ function CrewApp() {
             </button>
             <div className="text-center">
               <h1 className="font-bold text-lg text-gray-100">Work Dashboard</h1>
-              <p className="text-xs text-gray-400">Team Alpha</p>
+              <p className="text-xs text-gray-400">{currentUser?.team || 'Team'}</p>
             </div>
             <div className="flex items-center gap-1">
               <div className={`w-2 h-2 rounded-full ${clockedIn ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`}></div>
@@ -2015,7 +2106,7 @@ function CrewApp() {
           </div>
         </div>
 
-        {/* Map Section - Click to Expand */}
+        {/* Map Section */}
         <div className="p-4">
           <div className="glass card-modern rounded-xl overflow-hidden">
             <div className="p-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white flex justify-between items-center">
@@ -2037,7 +2128,7 @@ function CrewApp() {
           </div>
         </div>
 
-        {/* Clock In/Out Section */}
+        {/* Clock In/Out with sync */}
         <div className="px-4 pb-4">
           <div className="glass card-modern rounded-xl p-4 text-center">
             <div className="text-xl font-bold text-gray-100 mb-1">
@@ -2048,12 +2139,13 @@ function CrewApp() {
             </div>
             
             <button 
-              onClick={() => setClockedIn(!clockedIn)}
+              onClick={handleClockInOut}
+              disabled={loading}
               className={`w-full py-2 px-4 font-semibold rounded-lg transition-all text-sm ${
                 clockedIn 
                   ? 'bg-red-500 hover:bg-red-600 text-white' 
                   : 'btn-gradient-primary'
-              }`}
+              } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {clockedIn ? 'CLOCK OUT' : 'CLOCK IN'}
             </button>
@@ -2081,37 +2173,39 @@ function CrewApp() {
           </div>
         </div>
 
-        {/* Jobs Section with Fixed Scrolling */}
+        {/* Jobs List */}
         <div className="px-4">
           <div className="glass card-modern rounded-xl p-4 flex flex-col" style={{ maxHeight: 'calc(100vh - 500px)' }}>
-            {/* Filter Buttons */}
             <div className="flex justify-between items-center mb-3 flex-shrink-0">
               <h3 className="font-semibold text-gray-100 text-sm">Jobs</h3>
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setJobsFilter('active')}
-                  className={`px-2 py-1 text-xs rounded-lg transition-colors ${
-                    jobsFilter === 'active' 
-                      ? 'bg-blue-500/20 text-blue-400 border border-blue-400/30' 
-                      : 'glass text-gray-400'
-                  }`}
-                >
-                  Active ({jobs.filter(job => job.status === 'Scheduled' || job.status === 'In Progress').length})
-                </button>
-                <button 
-                  onClick={() => setJobsFilter('completed')}
-                  className={`px-2 py-1 text-xs rounded-lg transition-colors ${
-                    jobsFilter === 'completed' 
-                      ? 'bg-green-500/20 text-green-400 border border-green-400/30' 
-                      : 'glass text-gray-400'
-                  }`}
-                >
-                  Completed ({jobs.filter(job => job.status === 'Completed').length})
-                </button>
-              </div>
+              <button onClick={fetchJobs} className="p-1">
+                <RefreshCw size={16} className={`text-gray-400 ${loading ? 'animate-spin' : ''}`} />
+              </button>
             </div>
             
-            {/* Jobs List with proper scrolling */}
+            <div className="flex gap-2 mb-3">
+              <button 
+                onClick={() => setJobsFilter('active')}
+                className={`px-2 py-1 text-xs rounded-lg transition-colors ${
+                  jobsFilter === 'active' 
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-400/30' 
+                    : 'glass text-gray-400'
+                }`}
+              >
+                Active ({jobs.filter(job => job.status !== 'Completed').length})
+              </button>
+              <button 
+                onClick={() => setJobsFilter('completed')}
+                className={`px-2 py-1 text-xs rounded-lg transition-colors ${
+                  jobsFilter === 'completed' 
+                    ? 'bg-green-500/20 text-green-400 border border-green-400/30' 
+                    : 'glass text-gray-400'
+                }`}
+              >
+                Completed ({completedJobs})
+              </button>
+            </div>
+            
             <div className="flex-1 overflow-y-auto">
               <div className="space-y-2">
                 {displayJobs.length === 0 ? (
@@ -2126,16 +2220,21 @@ function CrewApp() {
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex-1">
                           <h4 className="font-semibold text-gray-100 text-sm">{job.customer}</h4>
-                          <p className="text-xs text-gray-400">{job.type}</p>
-                          <p className="text-xs text-gray-500">{job.address}</p>
+                          <p className="text-xs text-gray-400">{job.type || 'Lawn Service'}</p>
+                          <a 
+                            href={`https://maps.google.com/?q=${encodeURIComponent(job.address)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-400 hover:text-blue-300 underline"
+                          >
+                            <MapPin className="inline" size={10} /> {job.address}
+                          </a>
                         </div>
                         <div className="text-right">
-                          <div className="font-semibold text-gray-100 text-sm">{job.price}</div>
-                          <div className="text-xs text-gray-400">{job.equipment}</div>
+                          <div className="font-semibold text-gray-100 text-sm">{job.price || '$0'}</div>
                         </div>
                       </div>
 
-                      {/* Status Badge and Actions */}
                       <div className="flex items-center justify-between">
                         <span className={`px-2 py-1 text-xs rounded-full font-medium ${
                           job.status === 'Completed' ? 'bg-green-500/20 text-green-400' :
@@ -2147,15 +2246,19 @@ function CrewApp() {
                         
                         <div className="flex gap-2">
                           {job.phone && (
-                            <button className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30">
+                            <a 
+                              href={`tel:${job.phone}`}
+                              className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30"
+                            >
                               Call
-                            </button>
+                            </a>
                           )}
                           
                           {job.status === 'Scheduled' && jobsFilter === 'active' && (
                             <button 
                               onClick={() => updateJobStatus(job.id, 'In Progress')}
-                              className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded hover:bg-green-500/30"
+                              disabled={!clockedIn}
+                              className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded hover:bg-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               Start
                             </button>
@@ -2188,10 +2291,17 @@ function CrewApp() {
     );
   };
 
-  // Simplified Profile View
+  // FIXED Profile View - Shows ACTUAL user data
   const ProfileView = () => {
     const completedJobs = jobs.filter(j => j.status === 'Completed').length;
     const totalJobs = jobs.length;
+    
+    // Get real user initials
+    const initials = currentUser?.name
+      ?.split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase() || 'U';
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
@@ -2206,21 +2316,22 @@ function CrewApp() {
         </div>
 
         <div className="p-4 space-y-4">
-          {/* Profile Info */}
+          {/* Profile Info - NOW WITH REAL USER DATA */}
           <div className="glass card-modern rounded-xl p-6 text-center">
             <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mx-auto mb-3 flex items-center justify-center">
-              <span className="text-2xl font-bold text-white">JS</span>
+              <span className="text-2xl font-bold text-white">{initials}</span>
             </div>
-            <h2 className="text-xl font-bold text-gray-100">John Smith</h2>
-            <p className="text-gray-400">Team Alpha</p>
+            <h2 className="text-xl font-bold text-gray-100">{currentUser?.name || 'Crew Member'}</h2>
+            <p className="text-gray-400">{currentUser?.team || 'Team'}</p>
+            <p className="text-sm text-gray-500">ID: {currentUser?.employeeId || 'N/A'}</p>
             <div className="flex items-center justify-center gap-1 mt-2">
               <Star className="text-yellow-400 fill-current" size={16} />
-              <span className="font-semibold text-gray-100">4.8</span>
+              <span className="font-semibold text-gray-100">{userStats.rating.toFixed(1)}</span>
               <span className="text-gray-500 text-sm">rating</span>
             </div>
           </div>
 
-          {/* Today's Stats */}
+          {/* Performance Stats */}
           <div className="glass card-modern rounded-xl p-4">
             <h3 className="font-semibold text-gray-100 mb-3">Performance</h3>
             <div className="space-y-3">
@@ -2229,8 +2340,12 @@ function CrewApp() {
                 <span className="font-bold text-gray-100">{completedJobs}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-400">Total Jobs Assigned</span>
-                <span className="font-bold text-gray-100">{totalJobs}</span>
+                <span className="text-gray-400">Total Jobs This Week</span>
+                <span className="font-bold text-gray-100">{userStats.weeklyJobs}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Hours Worked</span>
+                <span className="font-bold text-gray-100">{userStats.totalHours.toFixed(1)}h</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-400">Completion Rate</span>
@@ -2247,7 +2362,28 @@ function CrewApp() {
             </div>
           </div>
 
-          {/* Contact Options */}
+          {/* Contact Info */}
+          {(currentUser?.email || currentUser?.phone) && (
+            <div className="glass card-modern rounded-xl p-4">
+              <h3 className="font-semibold text-gray-100 mb-3">Contact Info</h3>
+              <div className="space-y-2">
+                {currentUser?.email && (
+                  <div className="flex items-center gap-2">
+                    <Mail className="text-gray-400" size={16} />
+                    <span className="text-gray-300 text-sm">{currentUser.email}</span>
+                  </div>
+                )}
+                {currentUser?.phone && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="text-gray-400" size={16} />
+                    <span className="text-gray-300 text-sm">{currentUser.phone}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Quick Actions */}
           <div className="glass card-modern rounded-xl p-4">
             <h3 className="font-semibold text-gray-100 mb-3">Quick Actions</h3>
             <div className="space-y-2">
@@ -2624,8 +2760,8 @@ if (!isAuthenticated) {
           </button>
         </div>
         
-        {/* Your existing CrewApp component */}
-        <CrewApp />
+        {/* Pass currentUser to CrewApp - THIS IS THE FIX! */}
+        <CrewApp currentUser={currentUser} />
       </div>
     );
   }
