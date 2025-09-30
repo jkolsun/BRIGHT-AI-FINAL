@@ -15,6 +15,7 @@ import { VoiceCommandService } from './services/ai/voiceCommands';
 import { WeatherService } from './services/ai/weatherService';
 import { Lock, User, Shield, Eye, EyeOff, Info } from 'lucide-react';
 import { authService } from './services/auth/authService';
+import { Repeat } from 'lucide-react';
 
 // Import components
 import SmartImportModal from './components/SmartImportModal';
@@ -30,6 +31,7 @@ import CustomerResponseSystem from './components/Messages/CustomerResponseSystem
 import WeatherIntelligence from './components/Weather/WeatherIntelligence';
 import PredictiveMaintenance from './components/Maintenance/PredictiveMaintenance';
 import CrewManagementPanel from './components/CrewManagementPanel';
+import RecurringJobsManager from './components/Schedule/RecurringJobsManager';
 
 
 // Initialize services
@@ -624,11 +626,11 @@ const SchedulingView = ({ isMobile }) => {
     instructions: '',
     phone: '',
     equipment: 'Zero Turn',
-    date: new Date().toISOString().split('T')[0], // Add date field
-    time: '09:00' // Add time field
+    date: new Date().toISOString().split('T')[0],
+    time: '09:00'
   });
   
-  const [viewMode, setViewMode] = useState('calendar'); // 'calendar', 'list', or 'team'
+  const [viewMode, setViewMode] = useState('calendar'); // 'calendar', 'list', 'team', or 'recurring'
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTeam, setSelectedTeam] = useState('all');
   
@@ -654,7 +656,6 @@ const SchedulingView = ({ isMobile }) => {
   const getJobsByDate = (date) => {
     const dateStr = date.toISOString().split('T')[0];
     return jobs.filter(job => {
-      // For demo purposes, distribute existing jobs across the week
       const jobDate = job.date || dateStr;
       return jobDate === dateStr && (selectedTeam === 'all' || job.crew === selectedTeam);
     });
@@ -713,7 +714,7 @@ const SchedulingView = ({ isMobile }) => {
     }
   };
   
-  // Calendar View Component
+  // Calendar View Component (YOUR EXISTING CODE - NO CHANGES)
   const CalendarView = ({ isMobile }) => (
     <div className="glass card-modern rounded-xl p-6">
       <div className="flex justify-between items-center mb-6">
@@ -763,123 +764,120 @@ const SchedulingView = ({ isMobile }) => {
         </div>
       </div>
       
-      {/* Calendar Grid */}
-<div className={isMobile ? 'space-y-3' : 'grid grid-cols-7 gap-2'}>
-  {weekDates.map((date, index) => {
-    const dayJobs = getJobsByDate(date);
-    const isToday = date.toDateString() === new Date().toDateString();
-    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-    const dayNum = date.getDate();
-    
-    // Mobile view - simplified cards
-    if (isMobile) {
-      return (
-        <div 
-          key={index} 
-          className={`glass rounded-lg p-4 ${isToday ? 'ring-2 ring-green-400/50' : ''}`}
-        >
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <span className={`font-bold ${isToday ? 'text-green-400' : 'text-gray-100'}`}>
-                {dayName} {dayNum}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <span className="text-gray-400">{dayJobs.length} jobs</span>
-              <span className="text-green-400 font-bold">
-                ${dayJobs.reduce((sum, job) => sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0), 0)}
-              </span>
-            </div>
-          </div>
-          {dayJobs.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {dayJobs.slice(0, 2).map((job, idx) => (
-                <div key={idx} className="text-xs text-gray-400 pl-3 border-l-2 border-gray-600">
-                  {job.time || '9:00'} - {job.customer}
-                </div>
-              ))}
-              {dayJobs.length > 2 && (
-                <div className="text-xs text-gray-500 pl-3">
-                  +{dayJobs.length - 2} more
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    }
-    
-    // Desktop view - YOUR EXISTING CODE
-    return (
-      <div 
-        key={index} 
-        className={`glass rounded-lg p-3 min-h-[200px] ${
-          isToday ? 'ring-2 ring-green-400/50' : ''
-        }`}
-      >
-        {/* PASTE YOUR EXISTING DESKTOP CODE HERE - lines 15-72 from your snippet */}
-        <div className="text-center mb-2">
-          <div className={`text-xs font-medium ${
-            isToday ? 'text-green-400' : 'text-gray-400'
-          }`}>
-            {dayName}
-          </div>
-          <div className={`text-lg font-bold ${
-            isToday ? 'text-green-400' : 'text-gray-100'
-          }`}>
-            {dayNum}
-          </div>
-        </div>
-        
-        <div className="space-y-1">
-          {dayJobs.length === 0 ? (
-            <div className="text-xs text-gray-500 text-center py-4">
-              No jobs scheduled
-            </div>
-          ) : (
-            dayJobs.slice(0, 3).map((job, jobIndex) => {
-              const colors = teamColors[job.crew] || teamColors['Team Alpha'];
-              return (
-                <div 
-                  key={jobIndex}
-                  className={`p-2 rounded text-xs ${colors.bg} ${colors.border} border cursor-pointer hover:scale-105 transition-transform`}
-                  title={`${job.customer} - ${job.type}`}
-                >
-                  <div className="font-medium text-gray-100 truncate">
-                    {job.time || '9:00'} - {job.customer}
+      {/* Calendar Grid - YOUR EXISTING CODE */}
+      <div className={isMobile ? 'space-y-3' : 'grid grid-cols-7 gap-2'}>
+        {weekDates.map((date, index) => {
+          const dayJobs = getJobsByDate(date);
+          const isToday = date.toDateString() === new Date().toDateString();
+          const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+          const dayNum = date.getDate();
+          
+          if (isMobile) {
+            return (
+              <div 
+                key={index} 
+                className={`glass rounded-lg p-4 ${isToday ? 'ring-2 ring-green-400/50' : ''}`}
+              >
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <span className={`font-bold ${isToday ? 'text-green-400' : 'text-gray-100'}`}>
+                      {dayName} {dayNum}
+                    </span>
                   </div>
-                  <div className={`text-xs ${colors.text} truncate`}>
-                    {job.crew}
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-gray-400">{dayJobs.length} jobs</span>
+                    <span className="text-green-400 font-bold">
+                      ${dayJobs.reduce((sum, job) => sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0), 0)}
+                    </span>
                   </div>
                 </div>
-              );
-            })
-          )}
-          {dayJobs.length > 3 && (
-            <div className="text-xs text-gray-400 text-center">
-              +{dayJobs.length - 3} more
+                {dayJobs.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {dayJobs.slice(0, 2).map((job, idx) => (
+                      <div key={idx} className="text-xs text-gray-400 pl-3 border-l-2 border-gray-600">
+                        {job.time || '9:00'} - {job.customer}
+                      </div>
+                    ))}
+                    {dayJobs.length > 2 && (
+                      <div className="text-xs text-gray-500 pl-3">
+                        +{dayJobs.length - 2} more
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          
+          return (
+            <div 
+              key={index} 
+              className={`glass rounded-lg p-3 min-h-[200px] ${
+                isToday ? 'ring-2 ring-green-400/50' : ''
+              }`}
+            >
+              <div className="text-center mb-2">
+                <div className={`text-xs font-medium ${
+                  isToday ? 'text-green-400' : 'text-gray-400'
+                }`}>
+                  {dayName}
+                </div>
+                <div className={`text-lg font-bold ${
+                  isToday ? 'text-green-400' : 'text-gray-100'
+                }`}>
+                  {dayNum}
+                </div>
+              </div>
+              
+              <div className="space-y-1">
+                {dayJobs.length === 0 ? (
+                  <div className="text-xs text-gray-500 text-center py-4">
+                    No jobs scheduled
+                  </div>
+                ) : (
+                  dayJobs.slice(0, 3).map((job, jobIndex) => {
+                    const colors = teamColors[job.crew] || teamColors['Team Alpha'];
+                    return (
+                      <div 
+                        key={jobIndex}
+                        className={`p-2 rounded text-xs ${colors.bg} ${colors.border} border cursor-pointer hover:scale-105 transition-transform`}
+                        title={`${job.customer} - ${job.type}`}
+                      >
+                        <div className="font-medium text-gray-100 truncate">
+                          {job.time || '9:00'} - {job.customer}
+                        </div>
+                        <div className={`text-xs ${colors.text} truncate`}>
+                          {job.crew}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                {dayJobs.length > 3 && (
+                  <div className="text-xs text-gray-400 text-center">
+                    +{dayJobs.length - 3} more
+                  </div>
+                )}
+              </div>
+              
+              <div className="mt-auto pt-2 border-t border-white/10">
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">Jobs</span>
+                  <span className="text-gray-300 font-medium">{dayJobs.length}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">Revenue</span>
+                  <span className="text-green-400 font-medium">
+                    ${dayJobs.reduce((sum, job) => {
+                      return sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0);
+                    }, 0)}
+                  </span>
+                </div>
+              </div>
             </div>
-          )}
-        </div>
-        
-        <div className="mt-auto pt-2 border-t border-white/10">
-          <div className="flex justify-between text-xs">
-            <span className="text-gray-500">Jobs</span>
-            <span className="text-gray-300 font-medium">{dayJobs.length}</span>
-          </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-gray-500">Revenue</span>
-            <span className="text-green-400 font-medium">
-              ${dayJobs.reduce((sum, job) => {
-                return sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0);
-              }, 0)}
-            </span>
-          </div>
-        </div>
+          );
+        })}
       </div>
-    );
-  })}
-</div>
       
       {/* Week Summary */}
       <div className="mt-6 p-4 glass rounded-lg">
@@ -914,7 +912,7 @@ const SchedulingView = ({ isMobile }) => {
     </div>
   );
   
-  // Team View Component
+  // Team View Component (YOUR EXISTING CODE - NO CHANGES)
   const TeamView = () => (
     <div className="space-y-4">
       {['Team Alpha', 'Team Beta', 'Team Gamma'].map(teamName => {
@@ -938,7 +936,6 @@ const SchedulingView = ({ isMobile }) => {
               </div>
             </div>
             
-            {/* Team Stats */}
             <div className="grid grid-cols-4 gap-4 mb-4">
               <div className="text-center p-2 glass rounded-lg">
                 <div className="text-lg font-bold text-green-400">{workload.completed}</div>
@@ -960,7 +957,6 @@ const SchedulingView = ({ isMobile }) => {
               </div>
             </div>
             
-            {/* Team Jobs List */}
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {teamJobs.length === 0 ? (
                 <div className="text-center py-4 text-gray-500">
@@ -1005,7 +1001,7 @@ const SchedulingView = ({ isMobile }) => {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-100 gradient-text">Job Scheduling</h1>
         <div className="flex items-center gap-2">
-          {/* View Mode Switcher */}
+          {/* UPDATED View Mode Switcher - ADDED RECURRING BUTTON */}
           <div className="glass rounded-lg p-1 flex gap-1">
             <button
               onClick={() => setViewMode('calendar')}
@@ -1040,6 +1036,18 @@ const SchedulingView = ({ isMobile }) => {
               <Filter className="inline mr-2" size={16} />
               List
             </button>
+            {/* NEW RECURRING JOBS BUTTON */}
+            <button
+              onClick={() => setViewMode('recurring')}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                viewMode === 'recurring'
+                  ? 'btn-gradient-primary'
+                  : 'text-gray-400 hover:bg-white/10'
+              }`}
+            >
+              <Repeat className="inline mr-2" size={16} />
+              Recurring
+            </button>
           </div>
           
           <button onClick={fetchAllData} className="px-4 py-2 glass text-gray-300 rounded-lg hover:bg-white/10">
@@ -1049,9 +1057,9 @@ const SchedulingView = ({ isMobile }) => {
         </div>
       </div>
       
+      {/* MAIN CONTENT AREA WITH NEW RECURRING VIEW */}
       <div className={isMobile ? 'space-y-4' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
-        {/* Main Content Area */}
-        <div className={isMobile ? 'w-full' : 'lg:col-span-2'}>
+        <div className={viewMode === 'recurring' ? 'lg:col-span-3' : (isMobile ? 'w-full' : 'lg:col-span-2')}>
           {viewMode === 'calendar' && <CalendarView isMobile={isMobile} />}
           {viewMode === 'team' && <TeamView />}
           {viewMode === 'list' && (
@@ -1089,153 +1097,157 @@ const SchedulingView = ({ isMobile }) => {
               </div>
             </div>
           )}
+          {/* NEW RECURRING JOBS VIEW */}
+          {viewMode === 'recurring' && (
+            <RecurringJobsManager supabase={supabase} />
+          )}
         </div>
         
-        {/* Side Panel - Add New Job Form */}
-        <div className="space-y-4">
-          <div className="glass card-modern rounded-xl p-6">
-            <h3 className="font-semibold text-gray-100 mb-4">Quick Add Job</h3>
-            <div className="space-y-3">
-              <input
-                type="text"
-                placeholder="Customer name"
-                value={newJob.customer}
-                onChange={(e) => setNewJob({...newJob, customer: e.target.value})}
-                className="w-full p-2 glass rounded-lg text-gray-100 placeholder-gray-500"
-              />
-              <input
-                type="text"
-                placeholder="Job type"
-                value={newJob.type}
-                onChange={(e) => setNewJob({...newJob, type: e.target.value})}
-                className="w-full p-2 glass rounded-lg text-gray-100 placeholder-gray-500"
-              />
-              <input
-                type="text"
-                placeholder="Address"
-                value={newJob.address}
-                onChange={(e) => setNewJob({...newJob, address: e.target.value})}
-                className="w-full p-2 glass rounded-lg text-gray-100 placeholder-gray-500"
-              />
-              
-              <div className="grid grid-cols-2 gap-2">
+        {/* Side Panel - Only show when not in recurring view */}
+        {viewMode !== 'recurring' && (
+          <div className="space-y-4">
+            <div className="glass card-modern rounded-xl p-6">
+              <h3 className="font-semibold text-gray-100 mb-4">Quick Add Job</h3>
+              <div className="space-y-3">
                 <input
-                  type="date"
-                  value={newJob.date}
-                  onChange={(e) => setNewJob({...newJob, date: e.target.value})}
-                  className="p-2 glass rounded-lg text-gray-100"
+                  type="text"
+                  placeholder="Customer name"
+                  value={newJob.customer}
+                  onChange={(e) => setNewJob({...newJob, customer: e.target.value})}
+                  className="w-full p-2 glass rounded-lg text-gray-100 placeholder-gray-500"
                 />
                 <input
-                  type="time"
-                  value={newJob.time}
-                  onChange={(e) => setNewJob({...newJob, time: e.target.value})}
-                  className="p-2 glass rounded-lg text-gray-100"
+                  type="text"
+                  placeholder="Job type"
+                  value={newJob.type}
+                  onChange={(e) => setNewJob({...newJob, type: e.target.value})}
+                  className="w-full p-2 glass rounded-lg text-gray-100 placeholder-gray-500"
                 />
-              </div>
-              
-              <select
-                value={newJob.crew}
-                onChange={(e) => setNewJob({...newJob, crew: e.target.value})}
-                className="w-full p-2 glass rounded-lg text-gray-100 bg-transparent"
-              >
-                <option value="Team Alpha">Team Alpha</option>
-                <option value="Team Beta">Team Beta</option>
-                <option value="Team Gamma">Team Gamma</option>
-              </select>
-              
-              <select
-                value={newJob.equipment}
-                onChange={(e) => setNewJob({...newJob, equipment: e.target.value})}
-                className="w-full p-2 glass rounded-lg text-gray-100 bg-transparent"
-              >
-                <option value="Zero Turn">Zero Turn</option>
-                <option value="V Ride">V Ride</option>
-                <option value="Push Mower">Push Mower</option>
-                <option value="Other">Other</option>
-              </select>
-              
-              <input
-                type="text"
-                placeholder="Price (e.g., $150)"
-                value={newJob.price}
-                onChange={(e) => setNewJob({...newJob, price: e.target.value})}
-                className="w-full p-2 glass rounded-lg text-gray-100 placeholder-gray-500"
-              />
-              
-              <input
-                type="text"
-                placeholder="Phone number"
-                value={newJob.phone}
-                onChange={(e) => setNewJob({...newJob, phone: e.target.value})}
-                className="w-full p-2 glass rounded-lg text-gray-100 placeholder-gray-500"
-              />
-              
-              <textarea
-                placeholder="Special instructions"
-                value={newJob.instructions}
-                onChange={(e) => setNewJob({...newJob, instructions: e.target.value})}
-                className="w-full p-2 glass rounded-lg h-20 text-gray-100 placeholder-gray-500"
-              />
-              
-              <button 
-                onClick={handleAddJob}
-                className="w-full py-2 btn-gradient-primary rounded-lg font-medium"
-              >
-                Add Job to Schedule
-              </button>
-            </div>
-          </div>
-          
-          {/* Quick Stats */}
-          <div className="glass card-modern rounded-xl p-6">
-            <h3 className="font-semibold text-gray-100 mb-4">Today's Overview</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Total Jobs</span>
-                <span className="text-lg font-bold gradient-text">
-                  {jobs.filter(j => {
-                    const today = new Date().toISOString().split('T')[0];
-                    return (j.date || today) === today;
-                  }).length}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Teams Active</span>
-                <span className="text-lg font-bold text-green-400">3</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Est. Revenue</span>
-                <span className="text-lg font-bold text-blue-400">
-                  ${jobs.filter(j => {
-                    const today = new Date().toISOString().split('T')[0];
-                    return (j.date || today) === today;
-                  }).reduce((sum, job) => {
-                    return sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0);
-                  }, 0)}
-                </span>
+                <input
+                  type="text"
+                  placeholder="Address"
+                  value={newJob.address}
+                  onChange={(e) => setNewJob({...newJob, address: e.target.value})}
+                  className="w-full p-2 glass rounded-lg text-gray-100 placeholder-gray-500"
+                />
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="date"
+                    value={newJob.date}
+                    onChange={(e) => setNewJob({...newJob, date: e.target.value})}
+                    className="p-2 glass rounded-lg text-gray-100"
+                  />
+                  <input
+                    type="time"
+                    value={newJob.time}
+                    onChange={(e) => setNewJob({...newJob, time: e.target.value})}
+                    className="p-2 glass rounded-lg text-gray-100"
+                  />
+                </div>
+                
+                <select
+                  value={newJob.crew}
+                  onChange={(e) => setNewJob({...newJob, crew: e.target.value})}
+                  className="w-full p-2 glass rounded-lg text-gray-100 bg-transparent"
+                >
+                  <option value="Team Alpha">Team Alpha</option>
+                  <option value="Team Beta">Team Beta</option>
+                  <option value="Team Gamma">Team Gamma</option>
+                </select>
+                
+                <select
+                  value={newJob.equipment}
+                  onChange={(e) => setNewJob({...newJob, equipment: e.target.value})}
+                  className="w-full p-2 glass rounded-lg text-gray-100 bg-transparent"
+                >
+                  <option value="Zero Turn">Zero Turn</option>
+                  <option value="V Ride">V Ride</option>
+                  <option value="Push Mower">Push Mower</option>
+                  <option value="Other">Other</option>
+                </select>
+                
+                <input
+                  type="text"
+                  placeholder="Price (e.g., $150)"
+                  value={newJob.price}
+                  onChange={(e) => setNewJob({...newJob, price: e.target.value})}
+                  className="w-full p-2 glass rounded-lg text-gray-100 placeholder-gray-500"
+                />
+                
+                <input
+                  type="text"
+                  placeholder="Phone number"
+                  value={newJob.phone}
+                  onChange={(e) => setNewJob({...newJob, phone: e.target.value})}
+                  className="w-full p-2 glass rounded-lg text-gray-100 placeholder-gray-500"
+                />
+                
+                <textarea
+                  placeholder="Special instructions"
+                  value={newJob.instructions}
+                  onChange={(e) => setNewJob({...newJob, instructions: e.target.value})}
+                  className="w-full p-2 glass rounded-lg h-20 text-gray-100 placeholder-gray-500"
+                />
+                
+                <button 
+                  onClick={handleAddJob}
+                  className="w-full py-2 btn-gradient-primary rounded-lg font-medium"
+                >
+                  Add Job to Schedule
+                </button>
               </div>
             </div>
-          </div>
-          
-          {/* Equipment Status */}
-          <div className="glass card-modern rounded-xl p-6">
-            <h3 className="font-semibold text-gray-100 mb-4">Equipment Status</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center p-2">
-                <span className="text-sm text-gray-400">Zero Turn</span>
-                <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded">Available</span>
+            
+            <div className="glass card-modern rounded-xl p-6">
+              <h3 className="font-semibold text-gray-100 mb-4">Today's Overview</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Total Jobs</span>
+                  <span className="text-lg font-bold gradient-text">
+                    {jobs.filter(j => {
+                      const today = new Date().toISOString().split('T')[0];
+                      return (j.date || today) === today;
+                    }).length}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Teams Active</span>
+                  <span className="text-lg font-bold text-green-400">3</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Est. Revenue</span>
+                  <span className="text-lg font-bold text-blue-400">
+                    ${jobs.filter(j => {
+                      const today = new Date().toISOString().split('T')[0];
+                      return (j.date || today) === today;
+                    }).reduce((sum, job) => {
+                      return sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0);
+                    }, 0)}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between items-center p-2">
-                <span className="text-sm text-gray-400">V Ride</span>
-                <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded">Available</span>
-              </div>
-              <div className="flex justify-between items-center p-2">
-                <span className="text-sm text-gray-400">Push Mower</span>
-                <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded">In Use</span>
+            </div>
+            
+            <div className="glass card-modern rounded-xl p-6">
+              <h3 className="font-semibold text-gray-100 mb-4">Equipment Status</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center p-2">
+                  <span className="text-sm text-gray-400">Zero Turn</span>
+                  <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded">Available</span>
+                </div>
+                <div className="flex justify-between items-center p-2">
+                  <span className="text-sm text-gray-400">V Ride</span>
+                  <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded">Available</span>
+                </div>
+                <div className="flex justify-between items-center p-2">
+                  <span className="text-sm text-gray-400">Push Mower</span>
+                  <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded">In Use</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
