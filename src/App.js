@@ -287,7 +287,6 @@ function LoginScreen({ onLoginSuccess, onSwitchToSetup }) {
 function AdminApp() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(false);
-
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
@@ -297,7 +296,7 @@ function AdminApp() {
   const [messages, setMessages] = useState([]);
   const [crewMembers, setCrewMembers] = useState([]);
 
- useEffect(() => {
+  useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
@@ -311,10 +310,6 @@ function AdminApp() {
   }, []);
 
   // Fetch data from Supabase
-  useEffect(() => {
-    fetchAllData();
-  }, []);
-
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -325,16 +320,31 @@ function AdminApp() {
         supabase.fetchData('crew_members')
       ]);
       
-      setJobs(jobsData);
-      setQuotes(quotesData);
-      setMessages(messagesData);
-      setCrewMembers(crewData);
+      setJobs(jobsData || []);
+      setQuotes(quotesData || []);
+      setMessages(messagesData || []);
+      setCrewMembers(crewData || []);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // AUTO-REFRESH SETUP - This is the new part!
+  useEffect(() => {
+    // Initial fetch
+    fetchAllData();
+    
+    // Set up auto-refresh every 30 seconds
+    const refreshInterval = setInterval(() => {
+      console.log('Auto-refreshing admin data...');
+      fetchAllData();
+    }, 30000); // Refresh every 30 seconds
+    
+    // Cleanup on unmount
+    return () => clearInterval(refreshInterval);
+  }, []);
 
   const addNewJob = async (jobData) => {
     const newJob = await supabase.insertData('jobs', jobData);
@@ -354,7 +364,7 @@ function AdminApp() {
     return false;
   };
 
-   const handleTabChange = (tab) => {
+  const handleTabChange = (tab) => {
     setActiveTab(tab);
     if (isMobile) {
       setMobileMenuOpen(false);
@@ -1772,12 +1782,12 @@ const MessagesView = ({ isMobile }) => {
 
 
 // Modified CrewApp with real user data and proper syncing
-function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
+// COMPLETE REPLACEMENT for your CrewApp function
+// This removes ALL map code and fixes all glitches
+
+function CrewApp({ currentUser }) {
   const [activeView, setActiveView] = useState('menu');
   const [clockedIn, setClockedIn] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [jobsFilter, setJobsFilter] = useState('active');
-  const [mapExpanded, setMapExpanded] = useState(false);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [userStats, setUserStats] = useState({
@@ -1786,23 +1796,20 @@ function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
     weeklyJobs: 0
   });
 
-  // Load jobs and user data on mount
+  // Load data on mount
   useEffect(() => {
     if (currentUser) {
-      fetchJobs();
       loadUserData();
+      fetchJobs();
     }
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
   }, [currentUser]);
 
-  // Load user's actual stats from database
+  // Load user stats
   const loadUserData = async () => {
     try {
       const crewData = await supabase.fetchData('crew_members');
       const member = crewData.find(c => 
         c.employee_id === currentUser?.employeeId || 
-        c.employeeId === currentUser?.employeeId ||
         c.id === currentUser?.id
       );
       
@@ -1819,45 +1826,39 @@ function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
     }
   };
 
+  // Fetch jobs for team
   const fetchJobs = async () => {
     setLoading(true);
     try {
       const jobsData = await supabase.fetchData('jobs');
-      // Filter jobs for user's team
       const teamJobs = jobsData.filter(job => 
         job.crew === currentUser?.team || 
         job.assigned_crew === currentUser?.team ||
         job.status === 'Scheduled'
       );
-      setJobs(teamJobs);
+      setJobs(teamJobs || []);
     } catch (error) {
       console.error('Error fetching jobs:', error);
+      setJobs([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Update job status with database sync
+  // Update job status
   const updateJobStatus = async (jobId, newStatus) => {
     try {
       const result = await supabase.updateData('jobs', jobId, { 
         status: newStatus,
-        updated_at: new Date().toISOString(),
-        updated_by: currentUser?.employeeId
+        updated_at: new Date().toISOString()
       });
       
       if (result) {
-        setJobs(jobs.map(job => 
-          job.id === jobId ? { ...job, status: newStatus } : job
+        setJobs(prevJobs => prevJobs.map(job => 
+          job.id === jobId 
+            ? { ...job, status: newStatus, completedAt: newStatus === 'Completed' ? new Date().toISOString() : null }
+            : job
         ));
-        
-        // Update user stats if job completed
-        if (newStatus === 'Completed') {
-          setUserStats(prev => ({
-            ...prev,
-            weeklyJobs: prev.weeklyJobs + 1
-          }));
-        }
         return true;
       }
     } catch (error) {
@@ -1866,7 +1867,7 @@ function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
     return false;
   };
 
-  // Handle clock in/out with database sync
+  // Handle clock in/out
   const handleClockInOut = async () => {
     const newStatus = !clockedIn;
     setClockedIn(newStatus);
@@ -1874,8 +1875,7 @@ function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
     try {
       const crewData = await supabase.fetchData('crew_members');
       const member = crewData.find(c => 
-        c.employee_id === currentUser?.employeeId || 
-        c.id === currentUser?.id
+        c.employee_id === currentUser?.employeeId || c.id === currentUser?.id
       );
       
       if (member) {
@@ -1885,107 +1885,12 @@ function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
         });
       }
     } catch (error) {
-      console.error('Error updating clock status:', error);
-      // Revert on error
+      console.error('Error updating clock:', error);
       setClockedIn(!newStatus);
     }
   };
 
-  // Map Component (keeping your existing map)
-  const JobMap = ({ expanded = false }) => {
-    const mapRef = React.useRef(null);
-    const mapInstanceRef = React.useRef(null);
-    const [mapLoaded, setMapLoaded] = React.useState(false);
-
-    React.useEffect(() => {
-      if (typeof window !== 'undefined' && window.L && !mapLoaded) {
-        initializeMap();
-      }
-
-      function initializeMap() {
-        try {
-          if (mapInstanceRef.current) {
-            mapInstanceRef.current.remove();
-            mapInstanceRef.current = null;
-          }
-
-          if (mapRef.current) {
-            mapRef.current.innerHTML = '';
-          }
-
-          const map = window.L.map(mapRef.current, {
-            zoomControl: expanded,
-            attributionControl: false,
-            dragging: expanded,
-            scrollWheelZoom: expanded,
-            doubleClickZoom: expanded,
-            boxZoom: expanded,
-            keyboard: expanded
-          }).setView([40.7934, -77.8600], expanded ? 13 : 12);
-          
-          mapInstanceRef.current = map;
-          
-          window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-          // Add job markers
-          jobs.forEach((job, index) => {
-            const baseLatLng = [40.7934, -77.8600];
-            const offset = 0.015;
-            const lat = baseLatLng[0] + (index * offset) - 0.02;
-            const lng = baseLatLng[1] + ((index % 2) * offset) - 0.01;
-            
-            const markerColor = job.status === 'Completed' ? '#10b981' : 
-                               job.status === 'In Progress' ? '#3b82f6' : '#eab308';
-            
-            const marker = window.L.circleMarker([lat, lng], {
-              color: markerColor,
-              fillColor: markerColor,
-              fillOpacity: 0.8,
-              radius: expanded ? 8 : 6
-            }).addTo(map);
-            
-            marker.bindPopup(`
-              <div style="min-width: 150px;">
-                <strong>${job.customer}</strong><br>
-                ${job.type}<br>
-                Status: ${job.status}<br>
-                ${job.price || '$0'}
-              </div>
-            `);
-          });
-
-          // Current location marker
-          window.L.circleMarker([40.7934, -77.8600], {
-            color: '#ef4444',
-            fillColor: '#ef4444',
-            fillOpacity: 1,
-            radius: expanded ? 10 : 8
-          }).addTo(map);
-
-          setMapLoaded(true);
-        } catch (error) {
-          console.error('Error initializing map:', error);
-        }
-      }
-
-      return () => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.remove();
-          mapInstanceRef.current = null;
-        }
-      };
-    }, [expanded, jobs]);
-
-    return (
-      <div 
-        ref={mapRef} 
-        className={expanded ? "h-full w-full" : "h-32 w-full"}
-        style={{ minHeight: expanded ? '100vh' : '128px' }}
-      />
-    );
-  };
-
-  // Menu View - Updated with real user info
+  // Menu View
   const MenuView = () => (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <div className="px-6 py-8 text-center text-white">
@@ -2016,7 +1921,7 @@ function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
             onClick={() => setActiveView('profile')}
             className="w-full glass card-modern rounded-xl p-6"
           >
-            <Users className="mx-auto mb-3 text-blue-400" size={40} />
+            <User className="mx-auto mb-3 text-blue-400" size={40} />
             <h2 className="text-xl font-bold text-gray-100 mb-1">PROFILE</h2>
             <p className="text-gray-400 text-sm">View your stats</p>
           </button>
@@ -2036,267 +1941,412 @@ function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
     </div>
   );
 
-  // Work View - Keep your existing layout with data sync
-  const WorkView = () => {
-    const completedJobs = jobs.filter(j => j.status === 'Completed').length;
-    const activeJobs = jobs.filter(j => j.status === 'In Progress').length;
-    const scheduledJobs = jobs.filter(j => j.status === 'Scheduled').length;
+// Fixed WorkView Component - Replace this entire function in your App.js
+const WorkView = () => {
+  // LOCAL STATE MANAGEMENT - No dependencies on parent state updates
+  const [localJobs, setLocalJobs] = useState(jobs);
+  const [currentJobIndex, setCurrentJobIndex] = useState(0);
+  const [isWorking, setIsWorking] = useState(false);
+  const [expandedJob, setExpandedJob] = useState(true);
+  const [bottomFilter, setBottomFilter] = useState('upcoming');
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Update local jobs when parent jobs change
+  useEffect(() => {
+    setLocalJobs(jobs);
+  }, [jobs]);
+  
+  // Filter jobs locally
+  const activeJobs = localJobs.filter(j => 
+    j.status === 'Scheduled' || j.status === 'In Progress'
+  );
+  const completedJobs = localJobs.filter(j => j.status === 'Completed');
+  const skippedJobs = localJobs.filter(j => j.status === 'Skipped');
+  const currentJob = activeJobs[currentJobIndex] || null;
+  const upcomingJobs = activeJobs.slice(currentJobIndex + 1);
+  
+  // START JOB - Manages state locally first
+  const handleStartJob = () => {
+    if (!currentJob || !clockedIn || isProcessing) return;
     
-    const displayJobs = jobsFilter === 'active' 
-      ? jobs.filter(job => job.status === 'Scheduled' || job.status === 'In Progress')
-      : jobs.filter(job => job.status === 'Completed');
-
-    // Expanded Map View
-    if (mapExpanded) {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white relative">
-          <div className="absolute top-0 left-0 right-0 glass-dark z-10">
-            <div className="px-4 py-3 flex items-center justify-between">
-              <button onClick={() => setMapExpanded(false)} className="p-2">
-                <ChevronLeft size={24} />
-              </button>
-              <h1 className="font-bold text-lg text-gray-100">Job Map</h1>
-              <div className="w-8"></div>
-            </div>
-          </div>
-          <div className="h-screen w-full pt-14">
-            <JobMap expanded={true} />
-          </div>
-          
-          <div className="absolute bottom-4 left-4 glass rounded-lg p-3 text-xs">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                <span className="text-gray-300">Your Location</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                <span className="text-gray-300">Scheduled</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                <span className="text-gray-300">In Progress</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                <span className="text-gray-300">Completed</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
+    console.log('Starting job locally');
+    setIsWorking(true);
+    
+    // Update local state immediately
+    const updatedJobs = localJobs.map(job => 
+      job.id === currentJob.id 
+        ? { ...job, status: 'In Progress' }
+        : job
+    );
+    setLocalJobs(updatedJobs);
+    
+    // Sync with database in background (no await)
+    supabase.updateData('jobs', currentJob.id, { 
+      status: 'In Progress',
+      started_at: new Date().toISOString()
+    }).catch(err => console.error('DB sync failed:', err));
+  };
+  
+  // COMPLETE JOB - Fixed with local state management
+  const handleCompleteJob = () => {
+    if (!currentJob || isProcessing) return;
+    
+    setIsProcessing(true);
+    console.log('Completing job locally');
+    
+    // Update local state FIRST
+    const updatedJobs = localJobs.map(job => 
+      job.id === currentJob.id 
+        ? { ...job, status: 'Completed' }
+        : job
+    );
+    setLocalJobs(updatedJobs);
+    
+    // Reset work state
+    setIsWorking(false);
+    
+    // Move to next job after a brief delay
+    setTimeout(() => {
+      if (currentJobIndex < activeJobs.length - 1) {
+        setCurrentJobIndex(prev => prev + 1);
+      } else {
+        setCurrentJobIndex(0);
+      }
+      setIsProcessing(false);
+    }, 200);
+    
+    // Sync with database in background
+    supabase.updateData('jobs', currentJob.id, { 
+      status: 'Completed',
+      completed_at: new Date().toISOString()
+    }).catch(err => console.error('DB sync failed:', err));
+  };
+  
+  // SKIP JOB - Local state management
+  const handleSkipJob = () => {
+    if (!currentJob || isProcessing) return;
+    
+    console.log('Skipping job locally');
+    
+    // Update local state
+    const updatedJobs = localJobs.map(job => 
+      job.id === currentJob.id 
+        ? { ...job, status: 'Skipped' }
+        : job
+    );
+    setLocalJobs(updatedJobs);
+    setIsWorking(false);
+    
+    // Sync with database
+    supabase.updateData('jobs', currentJob.id, { 
+      status: 'Skipped',
+      skipped_at: new Date().toISOString()
+    }).catch(err => console.error('DB sync failed:', err));
+  };
+  
+  // REDO JOB - Restore to scheduled
+  const handleRedoJob = (jobId) => {
+    console.log('Restoring job:', jobId);
+    
+    // Update local state
+    const updatedJobs = localJobs.map(job => 
+      job.id === jobId 
+        ? { ...job, status: 'Scheduled' }
+        : job
+    );
+    setLocalJobs(updatedJobs);
+    
+    // Sync with database
+    supabase.updateData('jobs', jobId, { 
+      status: 'Scheduled',
+      restored_at: new Date().toISOString()
+    }).catch(err => console.error('DB sync failed:', err));
+  };
+  
+  // Get filtered jobs for bottom list
+  const getFilteredJobs = () => {
+    switch(bottomFilter) {
+      case 'upcoming': return upcomingJobs;
+      case 'completed': return completedJobs;
+      case 'skipped': return skippedJobs;
+      default: return [];
     }
+  };
 
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white pb-4">
-        {/* Header with real user info */}
-        <div className="glass-dark sticky top-0 z-20">
-          <div className="px-4 py-3 flex items-center justify-between">
-            <button onClick={() => setActiveView('menu')} className="p-2">
-              <ChevronLeft size={24} />
-            </button>
-            <div className="text-center">
-              <h1 className="font-bold text-lg text-gray-100">Work Dashboard</h1>
-              <p className="text-xs text-gray-400">{currentUser?.team || 'Team'}</p>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className={`w-2 h-2 rounded-full ${clockedIn ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`}></div>
-              <span className="text-xs">{clockedIn ? 'Active' : 'Offline'}</span>
-            </div>
+  return (
+    <div className="min-h-screen bg-gray-900">
+      {/* Header */}
+      <div className="bg-gray-800 shadow-lg sticky top-0 z-50">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <button 
+            onClick={() => setActiveView('menu')} 
+            className="p-2 hover:bg-gray-700 rounded-lg"
+          >
+            <ChevronLeft size={24} className="text-white" />
+          </button>
+          <div className="text-center">
+            <h1 className="font-semibold text-lg text-white">Today's Work</h1>
+            <p className="text-xs text-gray-400">
+              {activeJobs.length} active • {skippedJobs.length} skipped
+            </p>
           </div>
-        </div>
-
-        {/* Map Section */}
-        <div className="p-4">
-          <div className="glass card-modern rounded-xl overflow-hidden">
-            <div className="p-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white flex justify-between items-center">
-              <h3 className="font-bold text-sm">Job Map</h3>
-              <button 
-                onClick={() => setMapExpanded(true)}
-                className="text-xs px-2 py-1 bg-white/20 rounded hover:bg-white/30"
-              >
-                Expand Map
-              </button>
-            </div>
-            <div className="relative">
-              <JobMap expanded={false} />
-              <div className="absolute inset-0 bg-transparent cursor-pointer" onClick={() => setMapExpanded(true)}></div>
-            </div>
-            <div className="p-2 bg-gray-800/50 text-xs text-center text-gray-400">
-              Tap to view full map • {jobs.length} jobs in area
-            </div>
-          </div>
-        </div>
-
-        {/* Clock In/Out with sync */}
-        <div className="px-4 pb-4">
-          <div className="glass card-modern rounded-xl p-4 text-center">
-            <div className="text-xl font-bold text-gray-100 mb-1">
-              {currentTime.toLocaleTimeString()}
-            </div>
-            <div className="text-xs text-gray-400 mb-3">
-              {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          <div className="flex items-center gap-2">
+            {/* Clock Status Indicator */}
+            <div className={`px-3 py-1 rounded-full text-xs font-bold ${
+              clockedIn ? 'bg-green-500 text-white' : 'bg-gray-600 text-gray-300'
+            }`}>
+              {clockedIn ? 'ON' : 'OFF'}
             </div>
             
-            <button 
-              onClick={handleClockInOut}
-              disabled={loading}
-              className={`w-full py-2 px-4 font-semibold rounded-lg transition-all text-sm ${
-                clockedIn 
-                  ? 'bg-red-500 hover:bg-red-600 text-white' 
-                  : 'btn-gradient-primary'
-              } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {clockedIn ? 'CLOCK OUT' : 'CLOCK IN'}
-            </button>
-          </div>
-        </div>
-
-        {/* Stats Section */}
-        <div className="px-4 pb-4">
-          <div className="glass card-modern rounded-xl p-3">
-            <h3 className="font-semibold text-gray-100 mb-2 text-sm">Today's Statistics</h3>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="text-center">
-                <div className="text-xl font-bold text-green-400">{completedJobs}</div>
-                <div className="text-xs text-gray-400">Completed</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-bold text-blue-400">{activeJobs}</div>
-                <div className="text-xs text-gray-400">Active</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-bold text-yellow-400">{scheduledJobs}</div>
-                <div className="text-xs text-gray-400">Scheduled</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Jobs List */}
-        <div className="px-4">
-          <div className="glass card-modern rounded-xl p-4 flex flex-col" style={{ maxHeight: 'calc(100vh - 500px)' }}>
-            <div className="flex justify-between items-center mb-3 flex-shrink-0">
-              <h3 className="font-semibold text-gray-100 text-sm">Jobs</h3>
-              <button onClick={fetchJobs} className="p-1">
-                <RefreshCw size={16} className={`text-gray-400 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-            
-            <div className="flex gap-2 mb-3">
-              <button 
-                onClick={() => setJobsFilter('active')}
-                className={`px-2 py-1 text-xs rounded-lg transition-colors ${
-                  jobsFilter === 'active' 
-                    ? 'bg-blue-500/20 text-blue-400 border border-blue-400/30' 
-                    : 'glass text-gray-400'
-                }`}
+            {/* Clock Out Button - Shows only when clocked in */}
+            {clockedIn && (
+              <button
+                onClick={handleClockInOut}
+                className="px-3 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs font-medium hover:bg-red-500/30 transition-colors flex items-center gap-1"
               >
-                Active ({jobs.filter(job => job.status !== 'Completed').length})
+                <Clock size={12} />
+                Clock Out
               </button>
-              <button 
-                onClick={() => setJobsFilter('completed')}
-                className={`px-2 py-1 text-xs rounded-lg transition-colors ${
-                  jobsFilter === 'completed' 
-                    ? 'bg-green-500/20 text-green-400 border border-green-400/30' 
-                    : 'glass text-gray-400'
-                }`}
-              >
-                Completed ({completedJobs})
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto">
-              <div className="space-y-2">
-                {displayJobs.length === 0 ? (
-                  <div className="text-center py-6 text-gray-400">
-                    <p className="font-medium text-sm">
-                      {jobsFilter === 'active' ? 'No active jobs' : 'No completed jobs'}
-                    </p>
-                  </div>
-                ) : (
-                  displayJobs.map((job) => (
-                    <div key={job.id} className="glass rounded-lg p-3">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-100 text-sm">{job.customer}</h4>
-                          <p className="text-xs text-gray-400">{job.type || 'Lawn Service'}</p>
-                          <a 
-                            href={`https://maps.google.com/?q=${encodeURIComponent(job.address)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-400 hover:text-blue-300 underline"
-                          >
-                            <MapPin className="inline" size={10} /> {job.address}
-                          </a>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-semibold text-gray-100 text-sm">{job.price || '$0'}</div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                          job.status === 'Completed' ? 'bg-green-500/20 text-green-400' :
-                          job.status === 'In Progress' ? 'bg-blue-500/20 text-blue-400' :
-                          'bg-yellow-500/20 text-yellow-400'
-                        }`}>
-                          {job.status}
-                        </span>
-                        
-                        <div className="flex gap-2">
-                          {job.phone && (
-                            <a 
-                              href={`tel:${job.phone}`}
-                              className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30"
-                            >
-                              Call
-                            </a>
-                          )}
-                          
-                          {job.status === 'Scheduled' && jobsFilter === 'active' && (
-                            <button 
-                              onClick={() => updateJobStatus(job.id, 'In Progress')}
-                              disabled={!clockedIn}
-                              className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded hover:bg-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              Start
-                            </button>
-                          )}
-                          
-                          {job.status === 'In Progress' && jobsFilter === 'active' && (
-                            <button 
-                              onClick={() => updateJobStatus(job.id, 'Completed')}
-                              className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30"
-                            >
-                              Complete
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {job.instructions && (
-                        <div className="mt-2 p-2 bg-amber-500/10 rounded text-xs text-gray-300 border-l-2 border-amber-400">
-                          Notes: {job.instructions}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
-    );
-  };
 
-  // FIXED Profile View - Shows ACTUAL user data
+      {/* Clock In Reminder - Shows when NOT clocked in */}
+      {!clockedIn && (
+        <div className="m-4 p-4 bg-yellow-900/30 border border-yellow-500 rounded-lg">
+          <p className="text-yellow-300 text-sm font-medium text-center mb-3">
+            ⚠️ Please clock in to start working
+          </p>
+          <button
+            onClick={handleClockInOut}
+            className="w-full py-3 bg-green-500 text-white rounded-lg font-bold text-lg hover:bg-green-600"
+          >
+            <Clock className="inline mr-2" size={20} />
+            CLOCK IN TO START
+          </button>
+        </div>
+      )}
+
+      {/* Clocked In Status Bar - Shows when clocked in */}
+      {clockedIn && (
+        <div className="bg-green-500/10 border-b border-green-500/30 px-4 py-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-green-400">Clocked In</span>
+            </div>
+            <span className="text-xs text-gray-400">
+              Started: {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Current Job Card */}
+      {currentJob ? (
+        <div className="p-4">
+          <div className="bg-gray-800 rounded-xl shadow-xl overflow-hidden border border-gray-700">
+            {/* Job Header */}
+            <div className="p-4 bg-gradient-to-r from-blue-600 to-blue-700">
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold text-white">
+                    {currentJob.customer}
+                  </h2>
+                  <p className="text-blue-100 text-sm mt-1">
+                    {currentJob.type || currentJob.service || 'Lawn Service'}
+                  </p>
+                  {!expandedJob && currentJob.address && (
+                    <p className="text-blue-200 text-xs mt-2 truncate">
+                      📍 {currentJob.address}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* Skip Button - Only show if not working */}
+                  {!isWorking && (
+                    <button
+                      onClick={handleSkipJob}
+                      disabled={isProcessing}
+                      className="px-3 py-1 bg-yellow-500/30 text-yellow-200 rounded-lg text-xs font-medium hover:bg-yellow-500/40"
+                    >
+                      Skip
+                    </button>
+                  )}
+                  {/* Expand Button */}
+                  <button
+                    onClick={() => setExpandedJob(!expandedJob)}
+                    className="p-1 hover:bg-blue-500/30 rounded-lg"
+                  >
+                    <ChevronRight 
+                      size={24} 
+                      className={`text-white transform transition-transform ${
+                        expandedJob ? 'rotate-90' : ''
+                      }`} 
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Job Details */}
+            {expandedJob && (
+              <div className="p-4 space-y-3 bg-gray-850">
+                {currentJob.address && (
+                  <div className="flex items-start gap-3 p-3 bg-gray-700/50 rounded-lg">
+                    <MapPin className="text-blue-400 mt-1" size={20} />
+                    <div>
+                      <p className="text-sm text-gray-300">Service Address</p>
+                      <p className="text-white">{currentJob.address}</p>
+                    </div>
+                  </div>
+                )}
+
+                {currentJob.equipment && (
+                  <div className="flex items-start gap-3 p-3 bg-gray-700/50 rounded-lg">
+                    <span className="text-yellow-400">🔧</span>
+                    <div>
+                      <p className="text-sm text-gray-300">Equipment</p>
+                      <p className="text-white">{currentJob.equipment}</p>
+                    </div>
+                  </div>
+                )}
+
+                {currentJob.notes && (
+                  <div className="flex items-start gap-3 p-3 bg-gray-700/50 rounded-lg">
+                    <AlertCircle className="text-orange-400 mt-1" size={20} />
+                    <div>
+                      <p className="text-sm text-gray-300">Instructions</p>
+                      <p className="text-white">{currentJob.notes}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Action Button */}
+            <div className="p-4 bg-gray-850 border-t border-gray-700">
+              {!isWorking ? (
+                <button
+                  onClick={handleStartJob}
+                  disabled={!clockedIn || isProcessing}
+                  className={`w-full py-3 rounded-lg font-bold text-white text-lg ${
+                    !clockedIn || isProcessing
+                      ? 'bg-gray-600 opacity-50 cursor-not-allowed'
+                      : 'bg-green-600 hover:bg-green-700 active:bg-green-800'
+                  }`}
+                >
+                  {!clockedIn ? 'CLOCK IN FIRST' : isProcessing ? 'PROCESSING...' : 'START JOB'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleCompleteJob}
+                  disabled={isProcessing}
+                  className={`w-full py-3 rounded-lg font-bold text-white text-lg ${
+                    isProcessing
+                      ? 'bg-gray-600 opacity-50 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
+                  }`}
+                >
+                  {isProcessing ? 'PROCESSING...' : '✅ COMPLETE JOB'}
+                </button>
+              )}
+              
+              {isWorking && !isProcessing && (
+                <p className="text-center text-sm text-green-400 mt-2 animate-pulse">
+                  Job in progress...
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="p-8 text-center">
+          <CheckCircle size={48} className="text-green-500 mx-auto mb-3" />
+          <h3 className="text-lg font-semibold text-white">No Active Jobs</h3>
+          <p className="text-gray-400 mt-1">
+            {skippedJobs.length > 0 ? `${skippedJobs.length} jobs skipped` : 'All done!'}
+          </p>
+        </div>
+      )}
+
+      {/* Bottom Filtered Lists */}
+      <div className="px-4 pb-20">
+        {/* Filter Tabs */}
+        <div className="flex gap-2 mb-3 bg-gray-800 rounded-lg p-1">
+          {['upcoming', 'completed', 'skipped'].map(filter => (
+            <button
+              key={filter}
+              onClick={() => setBottomFilter(filter)}
+              className={`flex-1 py-2 px-3 rounded text-sm font-medium ${
+                bottomFilter === filter
+                  ? `${filter === 'upcoming' ? 'bg-blue-600' : filter === 'completed' ? 'bg-green-600' : 'bg-yellow-600'} text-white`
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              {filter.charAt(0).toUpperCase() + filter.slice(1)} (
+                {filter === 'upcoming' ? upcomingJobs.length : 
+                 filter === 'completed' ? completedJobs.length : 
+                 skippedJobs.length}
+              )
+            </button>
+          ))}
+        </div>
+
+        {/* Jobs List */}
+        <div className="space-y-2">
+          {getFilteredJobs().length === 0 ? (
+            <p className="text-center py-8 text-gray-500 text-sm">
+              No {bottomFilter} jobs
+            </p>
+          ) : (
+            getFilteredJobs().map((job, index) => (
+              <div
+                key={job.id}
+                className={`rounded-lg p-4 border ${
+                  bottomFilter === 'completed' 
+                    ? 'bg-gray-800/50 border-gray-700' 
+                    : bottomFilter === 'skipped'
+                    ? 'bg-yellow-900/20 border-yellow-800'
+                    : 'bg-gray-800 border-gray-700'
+                }`}
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className={`font-medium ${
+                      bottomFilter === 'completed' ? 'text-gray-300 line-through' : 'text-white'
+                    }`}>
+                      {job.customer}
+                    </h3>
+                    <p className="text-sm text-gray-400">
+                      {job.type || job.service || 'Service'}
+                    </p>
+                    {job.address && (
+                      <p className="text-xs text-gray-500 mt-1">📍 {job.address}</p>
+                    )}
+                  </div>
+                  
+                  {(bottomFilter === 'completed' || bottomFilter === 'skipped') && (
+                    <button
+                      onClick={() => handleRedoJob(job.id)}
+                      className="px-3 py-1 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded text-xs font-medium"
+                    >
+                      Restore
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+  // Profile View
   const ProfileView = () => {
     const completedJobs = jobs.filter(j => j.status === 'Completed').length;
-    const totalJobs = jobs.length;
-    
-    // Get real user initials
     const initials = currentUser?.name
       ?.split(' ')
       .map(n => n[0])
@@ -2316,7 +2366,6 @@ function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
         </div>
 
         <div className="p-4 space-y-4">
-          {/* Profile Info - NOW WITH REAL USER DATA */}
           <div className="glass card-modern rounded-xl p-6 text-center">
             <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mx-auto mb-3 flex items-center justify-center">
               <span className="text-2xl font-bold text-white">{initials}</span>
@@ -2331,7 +2380,6 @@ function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
             </div>
           </div>
 
-          {/* Performance Stats */}
           <div className="glass card-modern rounded-xl p-4">
             <h3 className="font-semibold text-gray-100 mb-3">Performance</h3>
             <div className="space-y-3">
@@ -2340,18 +2388,12 @@ function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
                 <span className="font-bold text-gray-100">{completedJobs}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-400">Total Jobs This Week</span>
+                <span className="text-gray-400">Total This Week</span>
                 <span className="font-bold text-gray-100">{userStats.weeklyJobs}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-400">Hours Worked</span>
                 <span className="font-bold text-gray-100">{userStats.totalHours.toFixed(1)}h</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400">Completion Rate</span>
-                <span className="font-bold text-green-400">
-                  {totalJobs > 0 ? Math.round((completedJobs / totalJobs) * 100) : 0}%
-                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-400">Status</span>
@@ -2362,7 +2404,6 @@ function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
             </div>
           </div>
 
-          {/* Contact Info */}
           {(currentUser?.email || currentUser?.phone) && (
             <div className="glass card-modern rounded-xl p-4">
               <h3 className="font-semibold text-gray-100 mb-3">Contact Info</h3>
@@ -2382,25 +2423,12 @@ function CrewApp({ currentUser }) {  // IMPORTANT: Now accepts currentUser prop
               </div>
             </div>
           )}
-
-          {/* Quick Actions */}
-          <div className="glass card-modern rounded-xl p-4">
-            <h3 className="font-semibold text-gray-100 mb-3">Quick Actions</h3>
-            <div className="space-y-2">
-              <button className="w-full py-3 glass text-gray-300 rounded-lg font-medium hover:bg-white/10">
-                <Phone className="inline mr-2" size={18} />
-                Contact Supervisor
-              </button>
-              <button className="w-full py-3 glass text-gray-300 rounded-lg font-medium hover:bg-white/10">
-                Report Issue
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     );
   };
 
+  // Main render
   return (
     <>
       {activeView === 'menu' && <MenuView />}
