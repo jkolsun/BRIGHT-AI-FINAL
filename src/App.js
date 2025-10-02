@@ -16,6 +16,7 @@ import { WeatherService } from './services/ai/weatherService';
 import { Lock, User, Shield, Eye, EyeOff, Info } from 'lucide-react';
 import { authService } from './services/auth/authService';
 import { Repeat } from 'lucide-react';
+import { Trash2 } from 'lucide-react'; 
 
 // Import components
 import SmartImportModal from './components/SmartImportModal';
@@ -713,204 +714,378 @@ const SchedulingView = ({ isMobile }) => {
       alert('Error adding job. Please try again.');
     }
   };
-  
-  // Calendar View Component (YOUR EXISTING CODE - NO CHANGES)
-  const CalendarView = ({ isMobile }) => (
-    <div className="glass card-modern rounded-xl p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => {
-              const newDate = new Date(selectedDate);
-              newDate.setDate(newDate.getDate() - 7);
-              setSelectedDate(newDate);
-            }}
-            className="p-2 glass rounded-lg hover:bg-white/10"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <h3 className="text-lg font-semibold text-gray-100">
-            Week of {weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </h3>
-          <button 
-            onClick={() => {
-              const newDate = new Date(selectedDate);
-              newDate.setDate(newDate.getDate() + 7);
-              setSelectedDate(newDate);
-            }}
-            className="p-2 glass rounded-lg hover:bg-white/10"
-          >
-            <ChevronRight size={20} />
-          </button>
-        </div>
+
+const CalendarView = ({ isMobile }) => {
+  // Step 3: Add these state variables
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [showJobModal, setShowJobModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Delete job function
+  const handleDeleteJob = async (jobId) => {
+    if (!window.confirm('Are you sure you want to delete this job? This cannot be undone.')) {
+      return;
+    }
+    
+    setDeleting(true);
+    try {
+      // Delete from Supabase
+      const success = await supabase.deleteData('jobs', jobId);
+      
+      if (success) {
+        // Update local state
+        const updatedJobs = jobs.filter(job => job.id !== jobId);
+        setJobs(updatedJobs);
         
-        <div className="flex items-center gap-2">
-          <select
-            value={selectedTeam}
-            onChange={(e) => setSelectedTeam(e.target.value)}
-            className="px-3 py-2 glass rounded-lg text-sm text-gray-100 bg-transparent"
-          >
-            <option value="all">All Teams</option>
-            <option value="Team Alpha">Team Alpha</option>
-            <option value="Team Beta">Team Beta</option>
-            <option value="Team Gamma">Team Gamma</option>
-          </select>
-          <button 
-            onClick={() => setSelectedDate(new Date())}
-            className="px-3 py-2 btn-gradient-primary rounded-lg text-sm"
-          >
-            Today
-          </button>
+        // Close modal and reset
+        setShowJobModal(false);
+        setSelectedJob(null);
+        
+        alert('✅ Job deleted successfully');
+      } else {
+        alert('❌ Failed to delete job. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error deleting job:', error);
+      alert('❌ Error deleting job: ' + error.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Job Details Modal Component
+  const JobDetailsModal = () => {
+    if (!selectedJob) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="glass card-modern rounded-xl p-6 max-w-md w-full">
+          <div className="flex justify-between items-start mb-4">
+            <h3 className="text-xl font-semibold text-gray-100">Job Details</h3>
+            <button 
+              onClick={() => {
+                setShowJobModal(false);
+                setSelectedJob(null);
+              }}
+              className="p-1 hover:bg-white/10 rounded"
+            >
+              <X size={20} className="text-gray-400" />
+            </button>
+          </div>
+          
+          <div className="space-y-3 mb-6">
+            <div>
+              <label className="text-xs text-gray-400">Customer</label>
+              <p className="text-gray-100 font-medium">{selectedJob.customer}</p>
+            </div>
+            
+            <div>
+              <label className="text-xs text-gray-400">Service Type</label>
+              <p className="text-gray-100">{selectedJob.type || selectedJob.service || 'Lawn Maintenance'}</p>
+            </div>
+            
+            <div>
+              <label className="text-xs text-gray-400">Address</label>
+              <p className="text-gray-100">{selectedJob.address || 'No address provided'}</p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-400">Date</label>
+                <p className="text-gray-100">{selectedJob.date || 'Today'}</p>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400">Time</label>
+                <p className="text-gray-100">{selectedJob.time || '9:00 AM'}</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-400">Crew</label>
+                <p className="text-gray-100">{selectedJob.crew || 'Unassigned'}</p>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400">Price</label>
+                <p className="text-green-400 font-medium">{selectedJob.price || '$0'}</p>
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-xs text-gray-400">Phone</label>
+              <p className="text-gray-100">{selectedJob.phone || selectedJob.customer_phone || 'No phone'}</p>
+            </div>
+            
+            <div>
+              <label className="text-xs text-gray-400">Status</label>
+              <span className={`inline-block px-2 py-1 text-xs rounded-full ${
+                selectedJob.status === 'Completed' ? 'bg-green-500/20 text-green-400' :
+                selectedJob.status === 'In Progress' ? 'bg-blue-500/20 text-blue-400' :
+                selectedJob.status === 'Cancelled' ? 'bg-red-500/20 text-red-400' :
+                'bg-yellow-500/20 text-yellow-400'
+              }`}>
+                {selectedJob.status || 'Scheduled'}
+              </span>
+            </div>
+            
+            {selectedJob.instructions && (
+              <div>
+                <label className="text-xs text-gray-400">Instructions</label>
+                <p className="text-gray-100 text-sm">{selectedJob.instructions}</p>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                updateJobStatus(selectedJob.id, 'In Progress');
+                setShowJobModal(false);
+              }}
+              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
+            >
+              Start Job
+            </button>
+            
+            <button
+              onClick={() => {
+                handleDeleteJob(selectedJob.id);
+              }}
+              disabled={deleting}
+              className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+            >
+              {deleting ? (
+                <>
+                  <RefreshCw className="animate-spin" size={16} />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 size={16} />
+                  Delete Job
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
+    );
+  };
+
+  // Return the component JSX
+  return (
+    <>
+      {/* Job Details Modal */}
+      {showJobModal && <JobDetailsModal />}
       
-      {/* Calendar Grid - YOUR EXISTING CODE */}
-      <div className={isMobile ? 'space-y-3' : 'grid grid-cols-7 gap-2'}>
-        {weekDates.map((date, index) => {
-          const dayJobs = getJobsByDate(date);
-          const isToday = date.toDateString() === new Date().toDateString();
-          const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-          const dayNum = date.getDate();
+      <div className="glass card-modern rounded-xl p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => {
+                const newDate = new Date(selectedDate);
+                newDate.setDate(newDate.getDate() - 7);
+                setSelectedDate(newDate);
+              }}
+              className="p-2 glass rounded-lg hover:bg-white/10"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <h3 className="text-lg font-semibold text-gray-100">
+              Week of {weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </h3>
+            <button 
+              onClick={() => {
+                const newDate = new Date(selectedDate);
+                newDate.setDate(newDate.getDate() + 7);
+                setSelectedDate(newDate);
+              }}
+              className="p-2 glass rounded-lg hover:bg-white/10"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
           
-          if (isMobile) {
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedTeam}
+              onChange={(e) => setSelectedTeam(e.target.value)}
+              className="px-3 py-2 glass rounded-lg text-sm text-gray-100 bg-transparent"
+            >
+              <option value="all">All Teams</option>
+              <option value="Team Alpha">Team Alpha</option>
+              <option value="Team Beta">Team Beta</option>
+              <option value="Team Gamma">Team Gamma</option>
+            </select>
+            <button 
+              onClick={() => setSelectedDate(new Date())}
+              className="px-3 py-2 btn-gradient-primary rounded-lg text-sm"
+            >
+              Today
+            </button>
+          </div>
+        </div>
+        
+        {/* Calendar Grid - Updated with click handlers */}
+        <div className={isMobile ? 'space-y-3' : 'grid grid-cols-7 gap-2'}>
+          {weekDates.map((date, index) => {
+            const dayJobs = getJobsByDate(date);
+            const isToday = date.toDateString() === new Date().toDateString();
+            const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+            const dayNum = date.getDate();
+            
+            if (isMobile) {
+              return (
+                <div 
+                  key={index} 
+                  className={`glass rounded-lg p-4 ${isToday ? 'ring-2 ring-green-400/50' : ''}`}
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <span className={`font-bold ${isToday ? 'text-green-400' : 'text-gray-100'}`}>
+                        {dayName} {dayNum}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="text-gray-400">{dayJobs.length} jobs</span>
+                      <span className="text-green-400 font-bold">
+                        ${dayJobs.reduce((sum, job) => sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0), 0)}
+                      </span>
+                    </div>
+                  </div>
+                  {dayJobs.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {dayJobs.slice(0, 2).map((job, idx) => (
+                        <div 
+                          key={idx} 
+                          className="text-xs text-gray-400 pl-3 border-l-2 border-gray-600 cursor-pointer hover:text-gray-200"
+                          onClick={() => {
+                            setSelectedJob(job);
+                            setShowJobModal(true);
+                          }}
+                        >
+                          {job.time || '9:00'} - {job.customer}
+                        </div>
+                      ))}
+                      {dayJobs.length > 2 && (
+                        <div className="text-xs text-gray-500 pl-3">
+                          +{dayJobs.length - 2} more
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            
             return (
               <div 
                 key={index} 
-                className={`glass rounded-lg p-4 ${isToday ? 'ring-2 ring-green-400/50' : ''}`}
+                className={`glass rounded-lg p-3 min-h-[200px] ${
+                  isToday ? 'ring-2 ring-green-400/50' : ''
+                }`}
               >
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <span className={`font-bold ${isToday ? 'text-green-400' : 'text-gray-100'}`}>
-                      {dayName} {dayNum}
-                    </span>
+                <div className="text-center mb-2">
+                  <div className={`text-xs font-medium ${
+                    isToday ? 'text-green-400' : 'text-gray-400'
+                  }`}>
+                    {dayName}
                   </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="text-gray-400">{dayJobs.length} jobs</span>
-                    <span className="text-green-400 font-bold">
-                      ${dayJobs.reduce((sum, job) => sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0), 0)}
+                  <div className={`text-lg font-bold ${
+                    isToday ? 'text-green-400' : 'text-gray-100'
+                  }`}>
+                    {dayNum}
+                  </div>
+                </div>
+                
+                <div className="space-y-1">
+                  {dayJobs.length === 0 ? (
+                    <div className="text-xs text-gray-500 text-center py-4">
+                      No jobs scheduled
+                    </div>
+                  ) : (
+                    dayJobs.slice(0, 3).map((job, jobIndex) => {
+                      const colors = teamColors[job.crew] || teamColors['Team Alpha'];
+                      return (
+                        <div 
+                          key={jobIndex}
+                          className={`p-2 rounded text-xs ${colors.bg} ${colors.border} border cursor-pointer hover:scale-105 transition-transform`}
+                          title={`${job.customer} - ${job.type}\nClick to view details`}
+                          onClick={() => {
+                            setSelectedJob(job);
+                            setShowJobModal(true);
+                          }}
+                        >
+                          <div className="font-medium text-gray-100 truncate">
+                            {job.time || '9:00'} - {job.customer}
+                          </div>
+                          <div className={`text-xs ${colors.text} truncate`}>
+                            {job.crew}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  {dayJobs.length > 3 && (
+                    <div className="text-xs text-gray-400 text-center">
+                      +{dayJobs.length - 3} more
+                    </div>
+                  )}
+                </div>
+                
+                <div className="mt-auto pt-2 border-t border-white/10">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Jobs</span>
+                    <span className="text-gray-300 font-medium">{dayJobs.length}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Revenue</span>
+                    <span className="text-green-400 font-medium">
+                      ${dayJobs.reduce((sum, job) => {
+                        return sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0);
+                      }, 0)}
                     </span>
                   </div>
                 </div>
-                {dayJobs.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {dayJobs.slice(0, 2).map((job, idx) => (
-                      <div key={idx} className="text-xs text-gray-400 pl-3 border-l-2 border-gray-600">
-                        {job.time || '9:00'} - {job.customer}
-                      </div>
-                    ))}
-                    {dayJobs.length > 2 && (
-                      <div className="text-xs text-gray-500 pl-3">
-                        +{dayJobs.length - 2} more
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             );
-          }
-          
-          return (
-            <div 
-              key={index} 
-              className={`glass rounded-lg p-3 min-h-[200px] ${
-                isToday ? 'ring-2 ring-green-400/50' : ''
-              }`}
-            >
-              <div className="text-center mb-2">
-                <div className={`text-xs font-medium ${
-                  isToday ? 'text-green-400' : 'text-gray-400'
-                }`}>
-                  {dayName}
-                </div>
-                <div className={`text-lg font-bold ${
-                  isToday ? 'text-green-400' : 'text-gray-100'
-                }`}>
-                  {dayNum}
-                </div>
+          })}
+        </div>
+        
+        {/* Week Summary */}
+        <div className="mt-6 p-4 glass rounded-lg">
+          <h4 className="text-sm font-semibold text-gray-100 mb-3">Week Summary</h4>
+          <div className="grid grid-cols-4 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold gradient-text">
+                {jobs.filter(j => selectedTeam === 'all' || j.crew === selectedTeam).length}
               </div>
-              
-              <div className="space-y-1">
-                {dayJobs.length === 0 ? (
-                  <div className="text-xs text-gray-500 text-center py-4">
-                    No jobs scheduled
-                  </div>
-                ) : (
-                  dayJobs.slice(0, 3).map((job, jobIndex) => {
-                    const colors = teamColors[job.crew] || teamColors['Team Alpha'];
-                    return (
-                      <div 
-                        key={jobIndex}
-                        className={`p-2 rounded text-xs ${colors.bg} ${colors.border} border cursor-pointer hover:scale-105 transition-transform`}
-                        title={`${job.customer} - ${job.type}`}
-                      >
-                        <div className="font-medium text-gray-100 truncate">
-                          {job.time || '9:00'} - {job.customer}
-                        </div>
-                        <div className={`text-xs ${colors.text} truncate`}>
-                          {job.crew}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-                {dayJobs.length > 3 && (
-                  <div className="text-xs text-gray-400 text-center">
-                    +{dayJobs.length - 3} more
-                  </div>
-                )}
+              <div className="text-xs text-gray-400">Total Jobs</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-400">
+                {jobs.filter(j => j.status === 'Completed' && (selectedTeam === 'all' || j.crew === selectedTeam)).length}
               </div>
-              
-              <div className="mt-auto pt-2 border-t border-white/10">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Jobs</span>
-                  <span className="text-gray-300 font-medium">{dayJobs.length}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Revenue</span>
-                  <span className="text-green-400 font-medium">
-                    ${dayJobs.reduce((sum, job) => {
-                      return sum + parseInt(job.price?.replace(/[^0-9]/g, '') || 0);
-                    }, 0)}
-                  </span>
-                </div>
+              <div className="text-xs text-gray-400">Completed</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-400">
+                {jobs.filter(j => j.status === 'In Progress' && (selectedTeam === 'all' || j.crew === selectedTeam)).length}
               </div>
+              <div className="text-xs text-gray-400">In Progress</div>
             </div>
-          );
-        })}
-      </div>
-      
-      {/* Week Summary */}
-      <div className="mt-6 p-4 glass rounded-lg">
-        <h4 className="text-sm font-semibold text-gray-100 mb-3">Week Summary</h4>
-        <div className="grid grid-cols-4 gap-4">
-          <div className="text-center">
-            <div className="text-2xl font-bold gradient-text">
-              {jobs.filter(j => selectedTeam === 'all' || j.crew === selectedTeam).length}
+            <div className="text-center">
+              <div className="text-2xl font-bold text-yellow-400">
+                {jobs.filter(j => j.status === 'Scheduled' && (selectedTeam === 'all' || j.crew === selectedTeam)).length}
+              </div>
+              <div className="text-xs text-gray-400">Scheduled</div>
             </div>
-            <div className="text-xs text-gray-400">Total Jobs</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-green-400">
-              {jobs.filter(j => j.status === 'Completed' && (selectedTeam === 'all' || j.crew === selectedTeam)).length}
-            </div>
-            <div className="text-xs text-gray-400">Completed</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-blue-400">
-              {jobs.filter(j => j.status === 'In Progress' && (selectedTeam === 'all' || j.crew === selectedTeam)).length}
-            </div>
-            <div className="text-xs text-gray-400">In Progress</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-yellow-400">
-              {jobs.filter(j => j.status === 'Scheduled' && (selectedTeam === 'all' || j.crew === selectedTeam)).length}
-            </div>
-            <div className="text-xs text-gray-400">Scheduled</div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
+};
   
   // Team View Component (YOUR EXISTING CODE - NO CHANGES)
   const TeamView = () => (
