@@ -1239,40 +1239,57 @@ const CalendarView = ({ isMobile }) => {
           {viewMode === 'calendar' && <CalendarView isMobile={isMobile} />}
           {viewMode === 'team' && <TeamView />}
           {viewMode === 'list' && (
-            <div className="glass card-modern rounded-xl p-6">
-              <h3 className="font-semibold text-gray-100 mb-4">All Jobs ({jobs.length})</h3>
-              <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                {jobs.map((job) => (
-                  <div key={job.id} className="glass rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h4 className="font-medium text-gray-100">{job.customer}</h4>
-                        <p className="text-sm text-gray-400">{job.type}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {job.date || 'Today'} at {job.time || '9:00 AM'} • {job.crew}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <select
-                          value={job.status}
-                          onChange={(e) => updateJobStatus(job.id, e.target.value)}
-                          className="text-sm px-2 py-1 glass rounded text-gray-100 bg-transparent"
-                        >
-                          <option value="Scheduled">Scheduled</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Completed">Completed</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-400">
-                      <p>{job.address}</p>
-                      <p className="mt-1">Equipment: {job.equipment} • Price: {job.price}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+  <div className="glass card-modern rounded-xl p-6">
+    <h3 className="font-semibold text-gray-100 mb-4">All Jobs ({jobs.length})</h3>
+    <div className="space-y-3 max-h-[600px] overflow-y-auto">
+      {jobs.map((job) => (
+        <div key={job.id} className="glass rounded-lg p-4">
+          <div className="flex justify-between items-start mb-2">
+            <div>
+              <h4 className="font-medium text-gray-100">{job.customer}</h4>
+              <p className="text-sm text-gray-400">{job.type}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {job.date || 'Today'} at {job.time || '9:00 AM'} • {job.crew}
+              </p>
             </div>
-          )}
+            <div className="flex gap-2">
+              <select
+                value={job.status}
+                onChange={(e) => updateJobStatus(job.id, e.target.value)}
+                className="text-sm px-2 py-1 glass rounded text-gray-100 bg-transparent"
+              >
+                <option value="Scheduled">Scheduled</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Completed">Completed</option>
+              </select>
+              {/* ADD THIS DELETE BUTTON RIGHT HERE */}
+              <button
+                onClick={async () => {
+                  if (window.confirm(`Delete job for ${job.customer}?`)) {
+                    const success = await supabase.deleteData('jobs', job.id);
+                    if (success) {
+                      fetchAllData();
+                    } else {
+                      alert('Failed to delete job');
+                    }
+                  }
+                }}
+                className="px-3 py-1 text-sm bg-red-600 hover:bg-red-700 text-white rounded flex items-center gap-1"
+              >
+                <Trash2 size={14} />
+                Delete
+              </button>
+            </div>
+          </div>
+          <div className="text-sm text-gray-400">
+            <p>{job.address}</p>
+            <p className="mt-1">Equipment: {job.equipment} • Price: {job.price}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
           {/* NEW RECURRING JOBS VIEW */}
           {viewMode === 'recurring' && (
             <RecurringJobsManager supabase={supabase} />
@@ -1884,7 +1901,6 @@ const MessagesView = ({ isMobile }) => {
     { id: 'crew_accounts', label: 'Crew Management', icon: Shield },
     { id: 'weather', label: 'Weather AI', icon: Cloud },
     { id: 'predictive', label: 'Predictive AI', icon: TrendingUp },
-    { id: 'reset', label: 'Reset Data', icon: Trash2 },
     
 
   ];

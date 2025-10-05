@@ -146,16 +146,15 @@ class SupabaseClient {
   }
 
   // FIXED: Delete data without strict company filtering  
- async deleteData(table, id = null) {
+async deleteData(table, id) {
   try {
-    let url;
-    if (id) {
-      // Delete specific record
-      url = `${this.url}/rest/v1/${table}?id=eq.${id}`;
-    } else {
-      // Delete ALL records - FIXED with WHERE clause
-      url = `${this.url}/rest/v1/${table}?id=gte.0`;
+    if (!id) {
+      console.error('No ID provided for deletion');
+      return false;
     }
+    
+    // Delete specific record with proper WHERE clause
+    const url = `${this.url}/rest/v1/${table}?id=eq.${id}`;
     
     const response = await fetch(url, {
       method: 'DELETE',
@@ -168,7 +167,7 @@ class SupabaseClient {
       return false;
     }
     
-    console.log(`Successfully deleted from ${table}`);
+    console.log(`Successfully deleted record ${id} from ${table}`);
     return true;
   } catch (error) {
     console.error(`Error deleting from ${table}:`, error);
