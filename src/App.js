@@ -33,6 +33,7 @@ import WeatherIntelligence from './components/Weather/WeatherIntelligence';
 import PredictiveMaintenance from './components/Maintenance/PredictiveMaintenance';
 import CrewManagementPanel from './components/CrewManagementPanel';
 import RecurringJobsManager from './components/Schedule/RecurringJobsManager';
+import DataResetTool from './components/DataResetTool';
 
 
 // Initialize services
@@ -1883,6 +1884,7 @@ const MessagesView = ({ isMobile }) => {
     { id: 'crew_accounts', label: 'Crew Management', icon: Shield },
     { id: 'weather', label: 'Weather AI', icon: Cloud },
     { id: 'predictive', label: 'Predictive AI', icon: TrendingUp },
+    { id: 'reset', label: 'Reset Data', icon: Trash2 },
     
 
   ];
@@ -1960,6 +1962,7 @@ const MessagesView = ({ isMobile }) => {
           {activeTab === 'weather' && <WeatherIntelligence isMobile={isMobile} />}
           {activeTab === 'predictive' && <PredictiveMaintenance isMobile={isMobile} />}
           {activeTab === 'crew_accounts' && <CrewManagementPanel isMobile={isMobile}/>}
+          {activeTab === 'reset' && <DataResetTool isMobile={isMobile} />}
        </div>
       </div>
     </div>
@@ -2621,6 +2624,7 @@ const WorkView = () => {
       {activeView === 'menu' && <MenuView />}
       {activeView === 'work' && <WorkView />}
       {activeView === 'profile' && <ProfileView />}
+      {activeView === 'reset' && <DataResetTool />}
     </>
   );
 }

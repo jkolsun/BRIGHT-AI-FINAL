@@ -146,28 +146,35 @@ class SupabaseClient {
   }
 
   // FIXED: Delete data without strict company filtering  
-  async deleteData(table, id) {
-    try {
-      const url = `${this.url}/rest/v1/${table}?id=eq.${id}`;
-      
-      const response = await fetch(url, {
-        method: 'DELETE',
-        headers: this.headers
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Error deleting from ${table}:`, errorText);
-        return false;
-      }
-      
-      console.log(`Successfully deleted from ${table} record ${id}`);
-      return true;
-    } catch (error) {
-      console.error(`Error deleting from ${table}:`, error);
+ async deleteData(table, id = null) {
+  try {
+    let url;
+    if (id) {
+      // Delete specific record
+      url = `${this.url}/rest/v1/${table}?id=eq.${id}`;
+    } else {
+      // Delete ALL records - FIXED with WHERE clause
+      url = `${this.url}/rest/v1/${table}?id=gte.0`;
+    }
+    
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: this.headers
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Error deleting from ${table}:`, errorText);
       return false;
     }
+    
+    console.log(`Successfully deleted from ${table}`);
+    return true;
+  } catch (error) {
+    console.error(`Error deleting from ${table}:`, error);
+    return false;
   }
+}
 
   // Helper method to test connection
   async testConnection() {
