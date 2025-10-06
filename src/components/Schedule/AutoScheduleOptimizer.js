@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { OpenAIService } from '../../services/ai/openai';
 import { supabase } from '../../services/database/supabase';
-import { n8nAutomation }  from '../../services/automation/n8n';
+import n8nAutomation from '../../services/automation/n8n';
 
 const AutoScheduleOptimizer = () => {
   const [jobs, setJobs] = useState([]);
