@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { OpenAIService } from '../../services/ai/openai';
 import { supabase } from '../../services/database/supabase';
+import { n8nAutomation }  from '../../services/automation/n8n';
 
 const AutoScheduleOptimizer = () => {
   const [jobs, setJobs] = useState([]);
@@ -80,18 +81,34 @@ const AutoScheduleOptimizer = () => {
     }
   };
 
-  const optimizeSchedule = async () => {
-    if (jobs.length === 0 || crews.length === 0) {
-      alert('Please ensure you have jobs and crews in the system before optimizing.');
+ const optimizeSchedule = async () => {
+  if (jobs.length === 0 || crews.length === 0) {
+    alert('Please ensure you have jobs and crews in the system before optimizing.');
+    return;
+  }
+
+  setOptimizing(true);
+  
+  try {
+    // First try n8n automation
+    const n8nResult = await n8nAutomation.requestScheduleOptimization();
+    
+    if (n8nResult.success) {
+      console.log('Schedule optimization triggered via n8n');
+      
+      // Wait a moment for n8n to process
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Reload the schedule to see changes
+      await loadTodaySchedule();
+      alert('✅ AI is optimizing your schedule. Refresh in a moment to see results.');
+      setOptimizing(false);
       return;
     }
-
-    setOptimizing(true);
     
-    try {
-      // Call the OpenAI service
-      const result = await ai.optimizeSchedule(jobs, crews);
-      
+    // Fallback to direct OpenAI if n8n fails
+    console.log('Falling back to direct OpenAI optimization');
+    const result = await ai.optimizeSchedule(jobs, crews);
       if (result.error) {
         console.error('Optimization error:', result.error);
         alert('Optimization failed. Please check your OpenAI API key in the .env file.');

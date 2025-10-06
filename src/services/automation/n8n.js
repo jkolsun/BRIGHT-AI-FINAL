@@ -1,76 +1,22 @@
 // services/automation/n8n.js
 export class N8NAutomation {
   constructor() {
-    this.webhookBase = process.env.REACT_APP_N8N_WEBHOOK_URL || 'https://your-n8n-instance.com/webhook';
+    // Your single webhook URL from AI Message Processor workflow
+    this.webhookUrl = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || process.env.REACT_APP_N8N_WEBHOOK_URL;
     this.maxRetries = 3;
     this.retryDelay = 1000;
-    this.errorLog = [];
   }
 
+  // Validate the webhook URL is configured
   validateWebhookUrl() {
-    if (this.webhookBase.includes('your-n8n-instance.com')) {
-      console.error('N8N webhook URL not configured. Please update REACT_APP_N8N_WEBHOOK_URL in .env');
+    if (!this.webhookUrl || this.webhookUrl.includes('your-n8n-instance')) {
+      console.error('N8N webhook URL not configured. Please update NEXT_PUBLIC_N8N_WEBHOOK_URL in .env.local');
       return false;
     }
     return true;
   }
 
-  validateMaintenanceData(data) {
-    const errors = [];
-    
-    if (!data) {
-      errors.push('No data provided');
-      return { valid: false, errors };
-    }
-
-    if (!data.customers || !Array.isArray(data.customers)) {
-      errors.push('Customers must be an array');
-    } else if (data.customers.length === 0) {
-      errors.push('No customers to process');
-    } else {
-      data.customers.forEach((customer, index) => {
-        if (!customer.phone && !customer.email) {
-          errors.push(`Customer ${index + 1}: Missing contact information (phone or email)`);
-        }
-        if (!customer.name && !customer.customer) {
-          errors.push(`Customer ${index + 1}: Missing customer name`);
-        }
-      });
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors
-    };
-  }
-
-  validateMessageData(message) {
-    const errors = [];
-
-    if (!message) {
-      errors.push('No message data provided');
-      return { valid: false, errors };
-    }
-
-    if (!message.content && !message.message) {
-      errors.push('Message content is required');
-    }
-
-    if (!message.from_phone && !message.phone && !message.from) {
-      errors.push('Sender phone number is required');
-    }
-
-    const phone = message.from_phone || message.phone || message.from;
-    if (phone && !/^[\d\s\-+()]+$/.test(phone)) {
-      errors.push('Invalid phone number format');
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors
-    };
-  }
-
+  // Retry logic for failed requests
   async retryRequest(requestFunc, retries = 0) {
     try {
       return await requestFunc();
@@ -85,111 +31,29 @@ export class N8NAutomation {
     }
   }
 
-  async handleResponse(response) {
-    if (!response.ok) {
-      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-      
-      try {
-        const errorBody = await response.json();
-        errorMessage += ` - ${errorBody.message || JSON.stringify(errorBody)}`;
-      } catch (e) {
-        try {
-          const textBody = await response.text();
-          if (textBody) errorMessage += ` - ${textBody}`;
-        } catch (e2) {
-          console.log('Could not read response body');
+  // Main method to process any message through AI
+  async processMessage(data) {
+    try {
+      if (!this.validateWebhookUrl()) {
+        return {
+          success: false,
+          error: 'Webhook URL not configured'
+        };
+      }
+
+      // Format the message for your AI Message Processor workflow
+      const requestData = {
+        body: {
+          message: data.message || data.content || '',
+          from_name: data.from_name || data.customer || data.name || 'Unknown',
+          from_phone: data.from_phone || data.phone || '',
+          from_email: data.from_email || data.email || '',
+          company_name: data.company_name || ''
         }
-      }
-
-      switch (response.status) {
-        case 400:
-          throw new Error(`Bad Request: ${errorMessage}`);
-        case 401:
-          throw new Error('Unauthorized: Check your N8N webhook authentication');
-        case 403:
-          throw new Error('Forbidden: N8N webhook access denied');
-        case 404:
-          throw new Error('N8N webhook not found. Is the workflow active?');
-        case 429:
-          throw new Error('Rate limited: Too many requests to N8N');
-        case 500:
-        case 502:
-        case 503:
-          throw new Error(`N8N server error: ${errorMessage}`);
-        default:
-          throw new Error(errorMessage);
-      }
-    }
-
-    try {
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      return { success: true, message: 'Request processed' };
-    }
-  }
-
-  logError(method, error, data) {
-    const errorEntry = {
-      timestamp: new Date().toISOString(),
-      method,
-      error: error.message,
-      data: JSON.stringify(data).substring(0, 500)
-    };
-    
-    this.errorLog.push(errorEntry);
-    
-    if (this.errorLog.length > 50) {
-      this.errorLog = this.errorLog.slice(-50);
-    }
-
-    console.error(`[N8N ${method}]`, error.message, { data });
-    
-    if (typeof window !== 'undefined' && window.Sentry) {
-      window.Sentry.captureException(error, {
-        extra: errorEntry
-      });
-    }
-  }
-
-  getRecentErrors() {
-    return this.errorLog;
-  }
-
-  async triggerMaintenanceWorkflow(data) {
-    try {
-      if (!this.validateWebhookUrl()) {
-        return {
-          success: false,
-          error: 'Webhook URL not configured'
-        };
-      }
-
-      const validation = this.validateMaintenanceData(data);
-      if (!validation.valid) {
-        return {
-          success: false,
-          errors: validation.errors,
-          message: 'Invalid data provided'
-        };
-      }
-
-      const requestData = {
-        trigger: 'predictive_maintenance',
-        customers: data.customers.map(customer => ({
-          name: customer.name || customer.customer || 'Unknown',
-          phone: customer.phone || customer.customer_phone || '',
-          email: customer.email || '',
-          address: customer.address || '',
-          service: customer.service || customer.type || 'Lawn Maintenance',
-          nextServiceDate: customer.nextServiceDate || customer.date || ''
-        })),
-        timestamp: new Date().toISOString(),
-        source: 'predictive_maintenance_ai'
       };
 
       const response = await this.retryRequest(async () => {
-        const res = await fetch(`${this.webhookBase}/maintenance-reminder`, {
+        const res = await fetch(this.webhookUrl, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -197,120 +61,144 @@ export class N8NAutomation {
           },
           body: JSON.stringify(requestData)
         });
-        return this.handleResponse(res);
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        // Try to parse JSON response, if not return success
+        try {
+          return await res.json();
+        } catch {
+          return { success: true };
+        }
       });
 
       return {
         success: true,
         data: response,
-        customersProcessed: requestData.customers.length
-      };
-
-    } catch (error) {
-      this.logError('triggerMaintenanceWorkflow', error, data);
-      
-      return {
-        success: false,
-        error: error.message,
-        retryable: !error.message.includes('Bad Request') && !error.message.includes('Unauthorized'),
-        timestamp: new Date().toISOString()
-      };
-    }
-  }
-
-  async processCustomerResponse(message) {
-    try {
-      if (!this.validateWebhookUrl()) {
-        return {
-          success: false,
-          error: 'Webhook URL not configured'
-        };
-      }
-
-      const validation = this.validateMessageData(message);
-      if (!validation.valid) {
-        return {
-          success: false,
-          errors: validation.errors,
-          message: 'Invalid message data'
-        };
-      }
-
-      const requestData = {
-        message: message.content || message.message || '',
-        from: message.from_phone || message.phone || message.from || '',
-        customer: message.customer || message.from_name || '',
-        timestamp: message.created_at || new Date().toISOString(),
-        source: 'customer_sms_response'
-      };
-
-      const messageText = requestData.message.toLowerCase();
-      let localIntent = 'unknown';
-      
-      if (messageText.includes('yes') || messageText.includes('confirm')) {
-        localIntent = 'confirm';
-      } else if (messageText.includes('no') || messageText.includes('cancel')) {
-        localIntent = 'cancel';
-      } else if (messageText.includes('change') || messageText.includes('reschedule')) {
-        localIntent = 'reschedule';
-      }
-
-      requestData.suggestedIntent = localIntent;
-
-      const response = await this.retryRequest(async () => {
-        const res = await fetch(`${this.webhookBase}/customer-response`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-Source': 'Bright-AI-App'
-          },
-          body: JSON.stringify(requestData)
-        });
-        return this.handleResponse(res);
-      });
-
-      if (!response.intent && localIntent !== 'unknown') {
-        response.intent = localIntent;
-      }
-
-      return {
-        success: true,
-        data: response,
-        intent: response.intent || localIntent,
         processed: true
       };
 
     } catch (error) {
-      this.logError('processCustomerResponse', error, message);
-      
-      if (error.message.includes('server error') || error.message.includes('not found')) {
-        console.log('N8N unavailable, processing locally');
-        
-        const messageText = (message.content || '').toLowerCase();
-        let fallbackIntent = 'unknown';
-        
-        if (messageText.includes('yes')) fallbackIntent = 'confirm';
-        else if (messageText.includes('no')) fallbackIntent = 'cancel';
-        else if (messageText.includes('change')) fallbackIntent = 'reschedule';
-        
-        return {
-          success: false,
-          error: error.message,
-          fallbackProcessing: true,
-          intent: fallbackIntent,
-          message: 'Processed locally due to N8N unavailability'
-        };
-      }
-      
+      console.error('[N8N processMessage]', error.message, { data });
       return {
         success: false,
         error: error.message,
-        retryable: !error.message.includes('Bad Request'),
+        retryable: error.message.includes('500') || error.message.includes('502'),
         timestamp: new Date().toISOString()
       };
     }
   }
 
+  // Process a customer's schedule change request
+  async processScheduleChange(data) {
+    return this.processMessage({
+      message: data.message || data.request,
+      from_name: data.customer_name,
+      from_phone: data.customer_phone,
+      from_email: data.customer_email,
+      company_name: data.company_name
+    });
+  }
+
+  // Process a cancellation request
+  async processCancellation(data) {
+    const message = `Cancel appointment for ${data.date || 'upcoming service'}. Reason: ${data.reason || 'Customer requested'}`;
+    
+    return this.processMessage({
+      message,
+      from_name: data.customer_name,
+      from_phone: data.customer_phone,
+      from_email: data.customer_email
+    });
+  }
+
+  // Request schedule optimization (triggers AI to optimize)
+  async requestScheduleOptimization() {
+    return this.processMessage({
+      message: "Optimize today's schedule based on current conditions",
+      from_name: "System",
+      from_email: "system@brightlandscaping.com"
+    });
+  }
+
+  // Process weather alert
+  async processWeatherAlert(weatherData) {
+    const message = `Weather alert: ${weatherData.condition}. Wind speed: ${weatherData.windSpeed}mph. Consider rescheduling outdoor work.`;
+    
+    return this.processMessage({
+      message,
+      from_name: "Weather System",
+      from_email: "weather@system.com"
+    });
+  }
+
+  // Process any customer SMS/text message
+  async processCustomerMessage(message) {
+    // Extract intent locally for immediate UI feedback
+    const messageText = (message.content || message.message || '').toLowerCase();
+    let localIntent = 'unknown';
+    
+    if (messageText.includes('reschedule') || messageText.includes('change') || messageText.includes('move')) {
+      localIntent = 'reschedule';
+    } else if (messageText.includes('cancel') || messageText.includes('stop')) {
+      localIntent = 'cancel';
+    } else if (messageText.includes('yes') || messageText.includes('confirm')) {
+      localIntent = 'confirm';
+    } else if (messageText.includes('no')) {
+      localIntent = 'decline';
+    } else if (messageText.includes('when') || messageText.includes('what time')) {
+      localIntent = 'inquiry';
+    }
+
+    // Send to AI for processing
+    const result = await this.processMessage({
+      message: message.content || message.message,
+      from_phone: message.from_phone || message.phone,
+      from_name: message.from_name || message.customer_name,
+      from_email: message.from_email
+    });
+
+    // Add local intent to result
+    if (result.success) {
+      result.intent = result.data?.intent || localIntent;
+    }
+
+    return result;
+  }
+
+  // Handle maintenance reminders
+  async triggerMaintenanceReminders(customers) {
+    const results = [];
+    
+    for (const customer of customers) {
+      const message = `Reminder: ${customer.service || 'Lawn maintenance'} scheduled for ${customer.nextServiceDate || 'this week'}`;
+      
+      const result = await this.processMessage({
+        message,
+        from_name: "Maintenance System",
+        from_email: "maintenance@system.com",
+        company_name: customer.company || ''
+      });
+      
+      results.push({
+        customer: customer.name,
+        ...result
+      });
+
+      // Small delay between messages to avoid overwhelming the system
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    return {
+      success: true,
+      processed: results.length,
+      results
+    };
+  }
+
+  // Check if n8n webhook is responding
   async checkHealth() {
     try {
       if (!this.validateWebhookUrl()) {
@@ -320,24 +208,24 @@ export class N8NAutomation {
         };
       }
 
-      const response = await fetch(`${this.webhookBase}/health`, {
-        method: 'GET',
-        headers: { 'X-Source': 'Bright-AI-App' }
+      // Send a minimal test message
+      const response = await fetch(this.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          body: {
+            message: "Health check",
+            from_name: "System",
+            from_email: "health@system.com"
+          }
+        })
       });
 
-      if (response.ok) {
-        return {
-          healthy: true,
-          message: 'N8N webhook is operational',
-          timestamp: new Date().toISOString()
-        };
-      } else {
-        return {
-          healthy: false,
-          message: `N8N webhook returned status ${response.status}`,
-          timestamp: new Date().toISOString()
-        };
-      }
+      return {
+        healthy: response.ok,
+        message: response.ok ? 'N8N webhook is operational' : `N8N returned status ${response.status}`,
+        timestamp: new Date().toISOString()
+      };
     } catch (error) {
       return {
         healthy: false,
@@ -347,37 +235,35 @@ export class N8NAutomation {
     }
   }
 
-  async batchProcessMaintenance(customers, batchSize = 10) {
+  // Batch process multiple messages
+  async batchProcess(messages, batchSize = 10) {
     const results = {
       successful: [],
       failed: [],
       totalProcessed: 0
     };
 
-    for (let i = 0; i < customers.length; i += batchSize) {
-      const batch = customers.slice(i, i + batchSize);
+    for (let i = 0; i < messages.length; i += batchSize) {
+      const batch = messages.slice(i, i + batchSize);
       
-      try {
-        const result = await this.triggerMaintenanceWorkflow({ customers: batch });
-        
-        if (result.success) {
-          results.successful.push(...batch);
-        } else {
-          results.failed.push({
-            batch,
-            error: result.error
-          });
+      for (const message of batch) {
+        try {
+          const result = await this.processMessage(message);
+          
+          if (result.success) {
+            results.successful.push({ message, result });
+          } else {
+            results.failed.push({ message, error: result.error });
+          }
+        } catch (error) {
+          results.failed.push({ message, error: error.message });
         }
-      } catch (error) {
-        results.failed.push({
-          batch,
-          error: error.message
-        });
+        
+        results.totalProcessed++;
       }
       
-      results.totalProcessed += batch.length;
-      
-      if (i + batchSize < customers.length) {
+      // Delay between batches
+      if (i + batchSize < messages.length) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
@@ -386,5 +272,6 @@ export class N8NAutomation {
   }
 }
 
+// Create singleton instance
 const n8nAutomation = new N8NAutomation();
 export default n8nAutomation;

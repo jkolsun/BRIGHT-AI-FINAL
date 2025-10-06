@@ -34,6 +34,7 @@ import PredictiveMaintenance from './components/Maintenance/PredictiveMaintenanc
 import CrewManagementPanel from './components/CrewManagementPanel';
 import RecurringJobsManager from './components/Schedule/RecurringJobsManager';
 import DataResetTool from './components/DataResetTool';
+import n8nAutomation from './services/automation/n8n';
 
 
 // Initialize services
@@ -1570,29 +1571,34 @@ const MessagesView = ({ isMobile }) => {
     }
   };
 
-  // Process individual message with AI
-  const processMessageWithAI = async (msg) => {
-    setIsProcessing(true);
-    setSelectedMessage(msg);
-    
-    // Simulate AI processing
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Update message status
-    const updatedMessage = {
-      ...msg,
-      status: 'processed',
-      aiAction: 'Schedule updated automatically',
-      confidence: Math.floor(Math.random() * 20) + 80,
-      aiResponse: 'Thank you for your message. I\'ve updated your service schedule as requested.',
-      actionTaken: {
-        type: 'schedule_update',
-        details: 'Rescheduled from 10 AM to 2 PM',
-        jobCreated: true,
-        jobId: Math.floor(Math.random() * 1000)
-      }
-    };
-    
+ // Process individual message with AI
+const processMessageWithAI = async (msg) => {
+  setIsProcessing(true);
+  setSelectedMessage(msg);
+  
+  // Send to n8n for actual AI processing
+  const n8nResult = await n8nAutomation.processCustomerMessage({
+    message: msg.message,
+    from_phone: msg.from_phone || msg.phone,
+    from_name: msg.from_name || msg.customer
+  });
+  
+  // Update message based on n8n response
+  const updatedMessage = {
+    ...msg,
+    status: n8nResult.success ? 'processed' : 'needs-review',
+    aiAction: n8nResult.success 
+      ? `AI: ${n8nResult.intent || 'processed'} - ${n8nResult.data?.response || 'Handled automatically'}`
+      : 'Requires manual review',
+    confidence: n8nResult.success ? 95 : 0,
+    aiResponse: n8nResult.data?.response || 'Processing complete',
+    actionTaken: {
+      type: n8nResult.intent || 'processed',
+      details: n8nResult.data?.action || 'Automated processing',
+      jobCreated: n8nResult.data?.jobCreated || false,
+      jobId: n8nResult.data?.jobId || null
+    }
+  };
     setMessages(messages.map(m => m.id === msg.id ? updatedMessage : m));
     
     setIsProcessing(false);

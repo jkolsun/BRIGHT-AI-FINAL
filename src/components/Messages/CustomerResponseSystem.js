@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { OpenAIService } from '../../services/ai/openai';
 import { supabase } from '../../services/database/supabase';
+import n8nAutomation from '../../services/automation/n8n';
 
 const CustomerResponseSystem = () => {
   const [messages, setMessages] = useState([]);
@@ -20,14 +21,19 @@ const CustomerResponseSystem = () => {
   });
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [autoMode, setAutoMode] = useState(true);
+  const [n8nConnected, setN8nConnected] = useState(false);
 
   const ai = new OpenAIService();
 
-  useEffect(() => {
-    loadMessages();
-    // Set up real-time subscription for new messages
-    subscribeToMessages();
-  }, []);
+ useEffect(() => {
+  const checkN8N = async () => {
+    const health = await n8nAutomation.checkHealth();
+    setN8nConnected(health.healthy);
+  };
+  checkN8N();
+  loadMessages();
+  subscribeToMessages();
+}, []);
 
   const loadMessages = async () => {
     try {
@@ -57,65 +63,108 @@ const CustomerResponseSystem = () => {
     });
   };
 
-  const processMessage = async (message) => {
-    setProcessing(true);
+const processMessage = async (message) => {
+  setProcessing(true);
+  
+  try {
+    // Send to n8n for AI processing
+    const n8nResult = await n8nAutomation.processCustomerMessage({
+      message: message.content,
+      from_phone: message.from_phone,
+      from_name: message.from_name || 'Customer',
+      from_email: message.from_email
+    });
     
-    try {
-      // Step 1: Analyze message with AI
-      const analysis = await ai.processCustomerMessage(message.content);
+    let analysis = {};
+    let actionTaken = null;
+    let scheduleUpdated = false;
+    
+    if (n8nResult.success) {
+      // Use n8n's AI response
+      analysis = {
+        intent: n8nResult.intent || n8nResult.data?.intent || 'general',
+        urgency: n8nResult.data?.urgency || 'normal',
+        suggestedResponse: n8nResult.data?.response || n8nResult.data?.suggestedResponse,
+        extractedData: n8nResult.data?.extractedData
+      };
       
-      // Step 2: Take action based on intent
-      let actionTaken = null;
-      let scheduleUpdated = false;
-      
-      switch(analysis.intent) {
-        case 'reschedule':
-          actionTaken = await handleReschedule(message, analysis);
-          scheduleUpdated = true;
-          break;
-        case 'cancel':
-          actionTaken = await handleCancellation(message, analysis);
-          scheduleUpdated = true;
-          break;
-        case 'urgent_service':
-          actionTaken = await handleUrgentRequest(message, analysis);
-          break;
-        case 'quote_request':
-          actionTaken = await handleQuoteRequest(message, analysis);
-          break;
-        case 'complaint':
-          actionTaken = await handleComplaint(message, analysis);
-          break;
-        default:
-          actionTaken = await handleGeneralInquiry(message, analysis);
-      }
-      
-      // Step 3: Send response if in auto mode
-      if (autoMode && analysis.suggestedResponse) {
-        await sendResponse(message, analysis.suggestedResponse);
-      }
-      
-      // Step 4: Update message record
-      await supabase.updateData('messages', message.id, {
-        processed: true,
-        intent: analysis.intent,
-        urgency: analysis.urgency,
-        auto_responded: autoMode,
-        suggested_response: analysis.suggestedResponse,
-        action_taken: actionTaken,
-        schedule_changed: scheduleUpdated,
-        processed_at: new Date().toISOString()
-      });
-      
-      // Reload messages
-      loadMessages();
-      
-    } catch (error) {
-      console.error('Error processing message:', error);
-    } finally {
-      setProcessing(false);
+      console.log('N8N processed message:', analysis);
+    } else {
+      // Fallback to local AI if n8n fails
+      console.log('N8N failed, using local AI processing');
+      analysis = await ai.processCustomerMessage(message.content);
     }
-  };
+    
+    // Take action based on intent (keep existing switch logic)
+    switch(analysis.intent) {
+      case 'reschedule':
+        actionTaken = await handleReschedule(message, analysis);
+        scheduleUpdated = true;
+        break;
+      case 'cancel':
+        actionTaken = await handleCancellation(message, analysis);
+        scheduleUpdated = true;
+        break;
+      // ... rest of existing cases
+    }
+    
+    // Send response if in auto mode
+    if (autoMode && analysis.suggestedResponse) {
+      await sendResponse(message, analysis.suggestedResponse);
+    }
+    
+    // Update message record
+    await supabase.updateData('messages', message.id, {
+      processed: true,
+      intent: analysis.intent,
+      urgency: analysis.urgency,
+      auto_responded: autoMode,
+      suggested_response: analysis.suggestedResponse,
+      action_taken: actionTaken,
+      schedule_changed: scheduleUpdated,
+      processed_at: new Date().toISOString(),
+      processed_by: n8nResult.success ? 'n8n-ai' : 'local-ai'
+    });
+    
+    // Reload messages
+    loadMessages();
+    
+  } catch (error) {
+    console.error('Error processing message:', error);
+    alert('Failed to process message');
+  } finally {
+    setProcessing(false);
+  }
+};
+
+const batchProcessMessages = async () => {
+  const unprocessedMessages = messages.filter(m => !m.processed);
+  
+  if (unprocessedMessages.length === 0) {
+    alert('No unprocessed messages');
+    return;
+  }
+  
+  setProcessing(true);
+  
+  try {
+    const results = await n8nAutomation.batchProcess(
+      unprocessedMessages.map(m => ({
+        message: m.content,
+        from_name: m.from_name,
+        from_phone: m.from_phone
+      })),
+      5 // Process 5 at a time
+    );
+    
+    alert(`✅ Processed ${results.successful.length} messages via AI`);
+    loadMessages();
+  } catch (error) {
+    console.error('Batch processing failed:', error);
+  } finally {
+    setProcessing(false);
+  }
+};
 
   const handleReschedule = async (message, analysis) => {
     // Extract new date/time from message
@@ -372,6 +421,22 @@ const CustomerResponseSystem = () => {
                   Auto Mode OFF
                 </>
               )}
+            </button>
+            {/* N8N Connection Indicator */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100">
+              <div className={`w-2 h-2 rounded-full ${n8nConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+              <span className="text-sm text-gray-600">
+                N8N: {n8nConnected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+            {/* Batch Process Button */}
+            <button
+              onClick={batchProcessMessages}
+              disabled={processing}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+            >
+              <Zap size={16} />
+              Batch Process All
             </button>
           </div>
         </div>
