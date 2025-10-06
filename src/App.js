@@ -1502,17 +1502,73 @@ const MessagesView = ({ isMobile }) => {
   const [editingResponse, setEditingResponse] = useState(null);
   const [customResponse, setCustomResponse] = useState('');
   
-  // Enhanced AI statistics
-  const [aiStats, setAiStats] = useState({
-    totalProcessed: 127,
-    successRate: 94.8,
-    avgResponseTime: 1.2,
-    autoScheduled: 43,
-    quotesGenerated: 18,
-    escalated: 6,
-    todayProcessed: 24,
-    activeTasks: 3
-  });
+  // Calculate real AI statistics from actual messages
+  const calculateStats = () => {
+    const processed = messages.filter(m => 
+      m.status === 'processed' || m.status === 'approved' || m.status === 'auto-processed'
+    ).length;
+    const total = messages.length;
+    const today = messages.filter(m => {
+      const msgDate = new Date(m.created_at).toDateString();
+      return msgDate === new Date().toDateString();
+    }).length;
+    const urgent = messages.filter(m => m.status === 'urgent').length;
+    const needsReview = messages.filter(m => 
+      m.status === 'review' || m.status === 'needs-review'
+    ).length;
+    
+    return {
+      totalProcessed: processed,
+      successRate: total > 0 ? ((processed / total) * 100).toFixed(1) : 0,
+      avgResponseTime: 1.2, // You can calculate this from timestamps if you track them
+      autoScheduled: messages.filter(m => m.aiAction?.includes('schedule')).length,
+      quotesGenerated: messages.filter(m => m.aiAction?.includes('quote')).length,
+      escalated: messages.filter(m => m.status === 'rejected' || m.needsManualReview).length,
+      todayProcessed: today,
+      activeTasks: needsReview
+    };
+  };
+
+  const [aiStats, setAiStats] = useState(calculateStats());
+
+  // Update stats when messages change
+  useEffect(() => {
+    setAiStats(calculateStats());
+  }, [messages]);
+
+  // Add clear all messages function
+  const clearAllMessages = async () => {
+    if (!window.confirm('Delete ALL messages? This action cannot be undone.')) {
+      return;
+    }
+    
+    let deletedCount = 0;
+    for (const message of messages) {
+      const success = await supabase.deleteData('messages', message.id);
+      if (success) deletedCount++;
+    }
+    
+    if (deletedCount > 0) {
+      alert(`Successfully cleared ${deletedCount} messages`);
+      fetchAllData(); // Refresh the data
+    } else {
+      alert('Failed to clear messages');
+    }
+  };
+
+  // Add delete single message function
+  const deleteMessage = async (messageId, messageName) => {
+    if (!window.confirm(`Delete message from ${messageName}?`)) {
+      return;
+    }
+    
+    const success = await supabase.deleteData('messages', messageId);
+    if (success) {
+      setMessages(messages.filter(m => m.id !== messageId));
+    } else {
+      alert('Failed to delete message');
+    }
+  };
 
   // Process individual message with AI
   const processMessageWithAI = async (msg) => {
@@ -1538,11 +1594,6 @@ const MessagesView = ({ isMobile }) => {
     };
     
     setMessages(messages.map(m => m.id === msg.id ? updatedMessage : m));
-    setAiStats(prev => ({
-      ...prev,
-      totalProcessed: prev.totalProcessed + 1,
-      todayProcessed: prev.todayProcessed + 1
-    }));
     
     setIsProcessing(false);
     setSelectedMessage(null);
@@ -1614,6 +1665,18 @@ const MessagesView = ({ isMobile }) => {
             <Brain size={16} className={isProcessing ? 'animate-pulse' : ''} />
             {isProcessing ? 'AI Processing...' : 'Process All with AI'}
           </button>
+          
+          {/* NEW CLEAR ALL BUTTON */}
+          {messages.length > 0 && (
+            <button 
+              onClick={clearAllMessages}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2"
+            >
+              <Trash2 size={16} />
+              Clear All ({messages.length})
+            </button>
+          )}
+          
           <button className="px-4 py-2 glass text-gray-300 rounded-lg hover:bg-white/10 flex items-center gap-2">
             <Settings size={16} />
             AI Settings
@@ -1621,7 +1684,7 @@ const MessagesView = ({ isMobile }) => {
         </div>
       </div>
 
-      {/* AI Statistics Dashboard */}
+      {/* AI Statistics Dashboard - Using Real Data */}
       <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl shadow-xl p-6 text-white">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -1669,20 +1732,35 @@ const MessagesView = ({ isMobile }) => {
           </div>
         </div>
 
-        {/* AI Activity Graph */}
+        {/* AI Activity Graph - Real activity based on message timestamps */}
         <div className="mt-4 pt-4 border-t border-white/20">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm opacity-90">AI Activity (Last 24h)</span>
-            <span className="text-xs opacity-75">Peak: 2:30 PM</span>
+            <span className="text-xs opacity-75">Total: {messages.length} messages</span>
           </div>
           <div className="flex items-end gap-1 h-12">
-            {[3,5,7,4,8,12,15,18,14,20,16,22,25,19,15,12,8,10,7,5,4,3,2,3].map((val, i) => (
-              <div 
-                key={i} 
-                className="flex-1 bg-white/30 rounded-t transition-all hover:bg-white/50"
-                style={{ height: `${(val/25)*100}%` }}
-              />
-            ))}
+            {Array.from({length: 24}, (_, i) => {
+              const hour = new Date().getHours() - 23 + i;
+              const hourMessages = messages.filter(m => {
+                const msgHour = new Date(m.created_at).getHours();
+                return msgHour === (hour < 0 ? hour + 24 : hour);
+              }).length;
+              const maxMessages = Math.max(...Array.from({length: 24}, (_, j) => {
+                const h = new Date().getHours() - 23 + j;
+                return messages.filter(m => {
+                  const mh = new Date(m.created_at).getHours();
+                  return mh === (h < 0 ? h + 24 : h);
+                }).length;
+              }), 1);
+              return (
+                <div 
+                  key={i} 
+                  className="flex-1 bg-white/30 rounded-t transition-all hover:bg-white/50"
+                  style={{ height: `${(hourMessages/maxMessages)*100}%` }}
+                  title={`${hourMessages} messages`}
+                />
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1762,11 +1840,21 @@ const MessagesView = ({ isMobile }) => {
                         <p className="text-sm text-gray-300">{msg.aiAction || 'Processed automatically'}</p>
                       </div>
 
-                      {/* Admin Actions */}
+                      {/* Admin Actions - WITH DELETE BUTTON */}
                       <div className="flex gap-2">
                         <button className="px-3 py-1 text-xs glass text-gray-300 rounded hover:bg-white/10">
                           View Details
                         </button>
+                        
+                        {/* DELETE BUTTON */}
+                        <button 
+                          onClick={() => deleteMessage(msg.id, msg.from_name)}
+                          className="px-3 py-1 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 flex items-center gap-1"
+                        >
+                          <Trash2 size={10} />
+                          Delete
+                        </button>
+                        
                         {msg.status === 'processed' && (
                           <>
                             <button 
@@ -1831,7 +1919,7 @@ const MessagesView = ({ isMobile }) => {
                       </div>
                       <p className="text-sm text-gray-400 mb-2">{msg.message}</p>
 
-                      {/* Action Buttons */}
+                      {/* Action Buttons - WITH DELETE BUTTON */}
                       <div className="flex gap-2">
                         <button 
                           onClick={() => processMessageWithAI(msg)}
@@ -1845,6 +1933,15 @@ const MessagesView = ({ isMobile }) => {
                         </button>
                         <button className="px-3 py-1 text-xs glass text-gray-300 rounded hover:bg-white/10">
                           Create Job
+                        </button>
+                        
+                        {/* DELETE BUTTON */}
+                        <button 
+                          onClick={() => deleteMessage(msg.id, msg.from_name)}
+                          className="px-3 py-1 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 flex items-center gap-1"
+                        >
+                          <Trash2 size={10} />
+                          Delete
                         </button>
                       </div>
                     </div>

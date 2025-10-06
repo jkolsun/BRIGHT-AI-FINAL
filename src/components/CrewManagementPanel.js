@@ -1,5 +1,5 @@
 // components/CrewManagementPanel.js
-// COMPLETE VERSION with Transfer Dropdown and Fixed Edit
+// COMPLETE VERSION with Transfer Dropdown, Fixed Edit, and DELETE Feature
 
 import React, { useState, useEffect } from 'react';
 import { 
@@ -198,70 +198,70 @@ const CrewManagementPanel = ({ isMobile }) => {
   };
 
   const handleAddCrew = async () => {
-  if (!formData.name || !formData.employeeId || !formData.pin) {
-    showMessage('error', 'Please fill in all required fields');
-    return;
-  }
+    if (!formData.name || !formData.employeeId || !formData.pin) {
+      showMessage('error', 'Please fill in all required fields');
+      return;
+    }
 
-   setLoading(true);
-  try {
-    // Create the new member object without company_id
-    const newMember = {
-      name: formData.name,
-      employee_id: formData.employeeId.toUpperCase(), // Ensure uppercase
-      pin: formData.pin,
-      email: formData.email || null,
-      phone: formData.phone || null,
-      team: formData.team || 'Team Alpha',
-      role: formData.role || 'crew',
-      hourly_rate: parseFloat(formData.hourlyRate) || 25,
-      status: 'active',
-      is_active: true,
-      clock_status: 'clocked_out',
-      rating: 5.0,
-      hours_worked: 0,
-      jobs_completed: 0,
-      jobs_completed_today: 0,
-      created_at: new Date().toISOString()
-      // Removed company_id - let supabase.js handle it
-    };
+    setLoading(true);
+    try {
+      // Create the new member object without company_id
+      const newMember = {
+        name: formData.name,
+        employee_id: formData.employeeId.toUpperCase(), // Ensure uppercase
+        pin: formData.pin,
+        email: formData.email || null,
+        phone: formData.phone || null,
+        team: formData.team || 'Team Alpha',
+        role: formData.role || 'crew',
+        hourly_rate: parseFloat(formData.hourlyRate) || 25,
+        status: 'active',
+        is_active: true,
+        clock_status: 'clocked_out',
+        rating: 5.0,
+        hours_worked: 0,
+        jobs_completed: 0,
+        jobs_completed_today: 0,
+        created_at: new Date().toISOString()
+        // Removed company_id - let supabase.js handle it
+      };
 
       const result = await supabase.insertData('crew_members', newMember);
       
-       if (result) {
-      showMessage('success', `${formData.name} added successfully! Employee ID: ${formData.employeeId}, PIN: ${formData.pin}`);
-      
-      // Reset form
-      setShowAddForm(false);
-      setFormData({
-        name: '',
-        employeeId: '',
-        pin: '',
-        email: '',
-        phone: '',
-        team: 'Team Alpha',
-        role: 'crew',
-        hourlyRate: '',
-        startDate: new Date().toISOString().split('T')[0]
-      });
+      if (result) {
+        showMessage('success', `${formData.name} added successfully! Employee ID: ${formData.employeeId}, PIN: ${formData.pin}`);
+        
+        // Reset form
+        setShowAddForm(false);
+        setFormData({
+          name: '',
+          employeeId: '',
+          pin: '',
+          email: '',
+          phone: '',
+          team: 'Team Alpha',
+          role: 'crew',
+          hourlyRate: '',
+          startDate: new Date().toISOString().split('T')[0]
+        });
         loadCrewMembers();
-    } else {
-      showMessage('error', 'Failed to add crew member. Please try again.');
+      } else {
+        showMessage('error', 'Failed to add crew member. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error adding crew:', error);
+      // Show more specific error message
+      if (error.message.includes('duplicate')) {
+        showMessage('error', 'Employee ID already exists');
+      } else if (error.message.includes('column')) {
+        showMessage('error', 'Database configuration issue. Contact support.');
+      } else {
+        showMessage('error', 'Failed to add crew member: ' + error.message);
+      }
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Error adding crew:', error);
-    // Show more specific error message
-    if (error.message.includes('duplicate')) {
-      showMessage('error', 'Employee ID already exists');
-    } else if (error.message.includes('column')) {
-      showMessage('error', 'Database configuration issue. Contact support.');
-    } else {
-      showMessage('error', 'Failed to add crew member: ' + error.message);
-    }
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // FIXED UPDATE METHOD
   const handleUpdateCrew = async () => {
@@ -317,6 +317,35 @@ const CrewManagementPanel = ({ isMobile }) => {
     } catch (error) {
       console.error('Error updating crew:', error);
       showMessage('error', `Error: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // DELETE CREW MEMBER FUNCTION
+  const handleDeleteCrew = async (crewId, crewName) => {
+    if (!window.confirm(`Delete crew member ${crewName}? This will permanently remove all their records.`)) {
+      return;
+    }
+
+    // Double confirmation for safety
+    if (!window.confirm(`Are you absolutely sure? This action cannot be undone.`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const success = await supabase.deleteData('crew_members', crewId);
+      
+      if (success) {
+        showMessage('success', `${crewName} has been permanently removed from the system`);
+        loadCrewMembers(); // Refresh the list
+      } else {
+        showMessage('error', 'Failed to delete crew member. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error deleting crew member:', error);
+      showMessage('error', `Failed to delete crew member: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -461,7 +490,7 @@ const CrewManagementPanel = ({ isMobile }) => {
       return;
     }
     
-    if (window.confirm(`Delete ${teamName}? Members will be moved to Unassigned.`)) {
+    if (!window.confirm(`Delete ${teamName}? Members will be moved to Unassigned.`)) {
       return;
     }
     
@@ -949,7 +978,7 @@ const CrewManagementPanel = ({ isMobile }) => {
     );
   };
 
-  // Crew List Tab Component  
+  // Crew List Tab Component - UPDATED WITH DELETE FUNCTIONALITY
   const CrewListTab = () => (
     <div className="space-y-4">
       {/* Enhanced Filters */}
@@ -1045,7 +1074,7 @@ const CrewManagementPanel = ({ isMobile }) => {
                     {crew.phone}
                   </div>
 
-                  {/* Actions - NOW WITH TRANSFER DROPDOWN */}
+                  {/* Actions - WITH DELETE BUTTON */}
                   <div className="flex items-center gap-2">
                     <TransferDropdown 
                       crew={crew}
@@ -1074,13 +1103,23 @@ const CrewManagementPanel = ({ isMobile }) => {
                       onClick={() => handleToggleActive(crew.id, crew.is_active, crew.name)}
                       className={`p-2 rounded-lg transition-colors flex items-center gap-1 ${
                         crew.is_active 
-                          ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' 
+                          ? 'bg-orange-500/20 text-orange-400 hover:bg-orange-500/30' 
                           : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
                       }`}
                       title={crew.is_active ? 'Deactivate' : 'Reactivate'}
                     >
                       <Power size={16} />
                       <span className="text-xs">{crew.is_active ? 'Deactivate' : 'Activate'}</span>
+                    </button>
+                    
+                    {/* DELETE BUTTON */}
+                    <button
+                      onClick={() => handleDeleteCrew(crew.id, crew.name)}
+                      className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors flex items-center gap-1"
+                      title="Delete Permanently"
+                    >
+                      <Trash2 size={16} />
+                      <span className="text-xs">Delete</span>
                     </button>
                   </div>
                 </div>
@@ -1330,10 +1369,10 @@ const CrewManagementPanel = ({ isMobile }) => {
             <strong>Teams:</strong> Click "Manage Teams" to add, edit, or delete teams and assign trucks
           </div>
           <div>
-            <strong>Transfer:</strong> Click Transfer to select which team to move crew members to
+            <strong>Transfer:</strong> Click Transfer to move crew members between teams
           </div>
           <div>
-            <strong>Status:</strong> Deactivated members can be reactivated anytime
+            <strong>Status:</strong> Deactivate members temporarily or delete them permanently
           </div>
           <div>
             <strong>Credentials:</strong> Each member needs Employee ID + PIN to login
