@@ -35,6 +35,7 @@ import CrewManagementPanel from './components/CrewManagementPanel';
 import RecurringJobsManager from './components/Schedule/RecurringJobsManager';
 import DataResetTool from './components/DataResetTool';
 import n8nAutomation from './services/automation/n8n';
+import CustomerMessageSimulator from './components/Messages/CustomerMessageSimulator';
 
 
 // Initialize services
@@ -1502,6 +1503,7 @@ const MessagesView = ({ isMobile }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [editingResponse, setEditingResponse] = useState(null);
   const [customResponse, setCustomResponse] = useState('');
+  const [viewMode, setViewMode] = useState('messages');
   
   // Calculate real AI statistics from actual messages
   const calculateStats = () => {
@@ -1521,7 +1523,7 @@ const MessagesView = ({ isMobile }) => {
     return {
       totalProcessed: processed,
       successRate: total > 0 ? ((processed / total) * 100).toFixed(1) : 0,
-      avgResponseTime: 1.2, // You can calculate this from timestamps if you track them
+      avgResponseTime: 1.2,
       autoScheduled: messages.filter(m => m.aiAction?.includes('schedule')).length,
       quotesGenerated: messages.filter(m => m.aiAction?.includes('quote')).length,
       escalated: messages.filter(m => m.status === 'rejected' || m.needsManualReview).length,
@@ -1551,7 +1553,7 @@ const MessagesView = ({ isMobile }) => {
     
     if (deletedCount > 0) {
       alert(`Successfully cleared ${deletedCount} messages`);
-      fetchAllData(); // Refresh the data
+      fetchAllData();
     } else {
       alert('Failed to clear messages');
     }
@@ -1571,34 +1573,34 @@ const MessagesView = ({ isMobile }) => {
     }
   };
 
- // Process individual message with AI
-const processMessageWithAI = async (msg) => {
-  setIsProcessing(true);
-  setSelectedMessage(msg);
-  
-  // Send to n8n for actual AI processing
-  const n8nResult = await n8nAutomation.processCustomerMessage({
-    message: msg.message,
-    from_phone: msg.from_phone || msg.phone,
-    from_name: msg.from_name || msg.customer
-  });
-  
-  // Update message based on n8n response
-  const updatedMessage = {
-    ...msg,
-    status: n8nResult.success ? 'processed' : 'needs-review',
-    aiAction: n8nResult.success 
-      ? `AI: ${n8nResult.intent || 'processed'} - ${n8nResult.data?.response || 'Handled automatically'}`
-      : 'Requires manual review',
-    confidence: n8nResult.success ? 95 : 0,
-    aiResponse: n8nResult.data?.response || 'Processing complete',
-    actionTaken: {
-      type: n8nResult.intent || 'processed',
-      details: n8nResult.data?.action || 'Automated processing',
-      jobCreated: n8nResult.data?.jobCreated || false,
-      jobId: n8nResult.data?.jobId || null
-    }
-  };
+  // Process individual message with AI
+  const processMessageWithAI = async (msg) => {
+    setIsProcessing(true);
+    setSelectedMessage(msg);
+    
+    // Send to n8n for actual AI processing
+    const n8nResult = await n8nAutomation.processCustomerMessage({
+      message: msg.message,
+      from_phone: msg.from_phone || msg.phone,
+      from_name: msg.from_name || msg.customer
+    });
+    
+    // Update message based on n8n response
+    const updatedMessage = {
+      ...msg,
+      status: n8nResult.success ? 'processed' : 'needs-review',
+      aiAction: n8nResult.success 
+        ? `AI: ${n8nResult.intent || 'processed'} - ${n8nResult.data?.response || 'Handled automatically'}`
+        : 'Requires manual review',
+      confidence: n8nResult.success ? 95 : 0,
+      aiResponse: n8nResult.data?.response || 'Processing complete',
+      actionTaken: {
+        type: n8nResult.intent || 'processed',
+        details: n8nResult.data?.action || 'Automated processing',
+        jobCreated: n8nResult.data?.jobCreated || false,
+        jobId: n8nResult.data?.jobId || null
+      }
+    };
     setMessages(messages.map(m => m.id === msg.id ? updatedMessage : m));
     
     setIsProcessing(false);
@@ -1656,31 +1658,44 @@ const processMessageWithAI = async (msg) => {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
+      {/* UPDATED HEADER WITH TOGGLE BUTTON */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-100 gradient-text">AI Message Center</h1>
           <p className="text-sm text-gray-400">Intelligent message processing and automation</p>
         </div>
         <div className="flex gap-2">
+          {/* NEW TOGGLE BUTTON FOR SWITCHING VIEWS */}
           <button 
-            onClick={processAllMessages}
-            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 flex items-center gap-2 shadow-lg"
-            disabled={isProcessing}
+            onClick={() => setViewMode(viewMode === 'messages' ? 'simulator' : 'messages')}
+            className="px-4 py-2 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 flex items-center gap-2 shadow-lg"
           >
-            <Brain size={16} className={isProcessing ? 'animate-pulse' : ''} />
-            {isProcessing ? 'AI Processing...' : 'Process All with AI'}
+            <MessageSquare size={16} />
+            {viewMode === 'messages' ? 'Test Messages' : 'View Messages'}
           </button>
           
-          {/* NEW CLEAR ALL BUTTON */}
-          {messages.length > 0 && (
-            <button 
-              onClick={clearAllMessages}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2"
-            >
-              <Trash2 size={16} />
-              Clear All ({messages.length})
-            </button>
+          {/* ONLY SHOW THESE BUTTONS IN MESSAGES VIEW */}
+          {viewMode === 'messages' && (
+            <>
+              <button 
+                onClick={processAllMessages}
+                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 flex items-center gap-2 shadow-lg"
+                disabled={isProcessing}
+              >
+                <Brain size={16} className={isProcessing ? 'animate-pulse' : ''} />
+                {isProcessing ? 'AI Processing...' : 'Process All with AI'}
+              </button>
+              
+              {messages.length > 0 && (
+                <button 
+                  onClick={clearAllMessages}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2"
+                >
+                  <Trash2 size={16} />
+                  Clear All ({messages.length})
+                </button>
+              )}
+            </>
           )}
           
           <button className="px-4 py-2 glass text-gray-300 rounded-lg hover:bg-white/10 flex items-center gap-2">
@@ -1690,280 +1705,285 @@ const processMessageWithAI = async (msg) => {
         </div>
       </div>
 
-      {/* AI Statistics Dashboard - Using Real Data */}
-      <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl shadow-xl p-6 text-white">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Activity size={20} />
-            AI Performance Metrics
-          </h3>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-green-400 rounded-full pulse-dot"></div>
-            <span className="text-sm">Live</span>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-          <div className="text-center">
-            <div className="text-2xl font-bold">{aiStats.totalProcessed}</div>
-            <div className="text-xs opacity-90">Total Processed</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold">{aiStats.todayProcessed}</div>
-            <div className="text-xs opacity-90">Today</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold">{aiStats.successRate}%</div>
-            <div className="text-xs opacity-90">Success Rate</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold">{aiStats.avgResponseTime}s</div>
-            <div className="text-xs opacity-90">Avg Response</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold">{aiStats.autoScheduled}</div>
-            <div className="text-xs opacity-90">Auto-Scheduled</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold">{aiStats.quotesGenerated}</div>
-            <div className="text-xs opacity-90">Quotes Made</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold">{aiStats.escalated}</div>
-            <div className="text-xs opacity-90">Escalated</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-green-400">{aiStats.activeTasks}</div>
-            <div className="text-xs opacity-90">Active Now</div>
-          </div>
-        </div>
-
-        {/* AI Activity Graph - Real activity based on message timestamps */}
-        <div className="mt-4 pt-4 border-t border-white/20">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm opacity-90">AI Activity (Last 24h)</span>
-            <span className="text-xs opacity-75">Total: {messages.length} messages</span>
-          </div>
-          <div className="flex items-end gap-1 h-12">
-            {Array.from({length: 24}, (_, i) => {
-              const hour = new Date().getHours() - 23 + i;
-              const hourMessages = messages.filter(m => {
-                const msgHour = new Date(m.created_at).getHours();
-                return msgHour === (hour < 0 ? hour + 24 : hour);
-              }).length;
-              const maxMessages = Math.max(...Array.from({length: 24}, (_, j) => {
-                const h = new Date().getHours() - 23 + j;
-                return messages.filter(m => {
-                  const mh = new Date(m.created_at).getHours();
-                  return mh === (h < 0 ? h + 24 : h);
-                }).length;
-              }), 1);
-              return (
-                <div 
-                  key={i} 
-                  className="flex-1 bg-white/30 rounded-t transition-all hover:bg-white/50"
-                  style={{ height: `${(hourMessages/maxMessages)*100}%` }}
-                  title={`${hourMessages} messages`}
-                />
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Filter Tabs */}
-      <div className={`glass rounded-xl p-1 ${isMobile ? 'grid grid-cols-2 gap-2 p-2' : 'flex gap-1'}`}>
-        {[
-          { id: 'all', label: 'All Messages', count: messages.length, icon: MessageSquare },
-          { id: 'processed', label: 'AI Processed', count: processedMessages.length, icon: CheckCircle2 },
-          { id: 'review', label: 'Needs Review', count: reviewMessages.length, icon: AlertCircle },
-          { id: 'urgent', label: 'Urgent', count: messages.filter(m => m.status === 'urgent').length, icon: Zap }
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveFilter(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all ${
-              activeFilter === tab.id
-                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg'
-                : 'text-gray-400 hover:bg-white/10'
-            }`}
-          >
-            <tab.icon size={18} />
-            <span className="font-medium">{tab.label}</span>
-            <span className={`px-2 py-0.5 text-xs rounded-full ${
-              activeFilter === tab.id
-                ? 'bg-white/20 text-white'
-                : 'bg-gray-500/20 text-gray-400'
-            }`}>
-              {tab.count}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <div className={isMobile ? 'space-y-4' : 'grid grid-cols-1 lg:grid-cols-2 gap-6'}>
-        {/* AI Processed Section */}
-        <div className="glass card-modern rounded-xl">
-          <div className="p-4 border-b border-white/10 bg-gradient-to-r from-green-500/10 to-blue-500/10">
-            <h3 className="font-semibold text-gray-100 flex items-center gap-2">
-              <CheckCircle2 size={20} className="text-green-400" />
-              AI Processed ({processedMessages.length})
-            </h3>
-            <p className="text-sm text-gray-400">Successfully handled by AI</p>
-          </div>
-          
-          <div className="divide-y divide-white/10 max-h-[600px] overflow-y-auto">
-            {processedMessages.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
-                <Bot size={48} className="mx-auto mb-2 opacity-50" />
-                <p>No processed messages yet</p>
+      {/* CONDITIONAL RENDERING BASED ON VIEW MODE */}
+      {viewMode === 'simulator' ? (
+        <CustomerMessageSimulator />
+      ) : (
+        <>
+          {/* AI Statistics Dashboard - Using Real Data */}
+          <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl shadow-xl p-6 text-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Activity size={20} />
+                AI Performance Metrics
+              </h3>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-400 rounded-full pulse-dot"></div>
+                <span className="text-sm">Live</span>
               </div>
-            ) : (
-              processedMessages.map(msg => (
-                <div key={msg.id} className="p-4 hover:bg-white/5 transition-colors">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-gray-100">{msg.from_name}</span>
-                        <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full flex items-center gap-1">
-                          <CheckCircle2 size={10} />
-                          AI Handled
-                        </span>
-                        {msg.confidence && (
-                          <span className="text-xs text-gray-500">
-                            {msg.confidence}% confidence
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-400 mb-2">{msg.message}</p>
-                      
-                      {/* AI Action Taken */}
-                      <div className="bg-blue-500/10 rounded-lg p-3 mb-2 border border-blue-500/20">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Bot size={14} className="text-blue-400" />
-                          <span className="text-xs font-medium text-blue-300">AI Action</span>
-                        </div>
-                        <p className="text-sm text-gray-300">{msg.aiAction || 'Processed automatically'}</p>
-                      </div>
-
-                      {/* Admin Actions - WITH DELETE BUTTON */}
-                      <div className="flex gap-2">
-                        <button className="px-3 py-1 text-xs glass text-gray-300 rounded hover:bg-white/10">
-                          View Details
-                        </button>
-                        
-                        {/* DELETE BUTTON */}
-                        <button 
-                          onClick={() => deleteMessage(msg.id, msg.from_name)}
-                          className="px-3 py-1 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 flex items-center gap-1"
-                        >
-                          <Trash2 size={10} />
-                          Delete
-                        </button>
-                        
-                        {msg.status === 'processed' && (
-                          <>
-                            <button 
-                              onClick={() => approveAction(msg.id)}
-                              className="px-3 py-1 text-xs bg-green-500/20 text-green-400 rounded hover:bg-green-500/30"
-                            >
-                              Approve
-                            </button>
-                            <button 
-                              onClick={() => rejectAction(msg.id)}
-                              className="px-3 py-1 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30"
-                            >
-                              Reject
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-xs text-gray-500">
-                      {new Date(msg.created_at).toLocaleTimeString()}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Needs Review Section */}
-        <div className="glass card-modern rounded-xl">
-          <div className="p-4 border-b border-white/10 bg-gradient-to-r from-yellow-500/10 to-red-500/10">
-            <h3 className="font-semibold text-gray-100 flex items-center gap-2">
-              <AlertCircle size={20} className="text-yellow-400" />
-              Needs Admin Review ({reviewMessages.length})
-            </h3>
-            <p className="text-sm text-gray-400">Requires manual intervention</p>
-          </div>
-          
-          <div className="divide-y divide-white/10 max-h-[600px] overflow-y-auto">
-            {reviewMessages.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
-                <CheckCircle2 size={48} className="mx-auto mb-2 opacity-50" />
-                <p>All messages processed!</p>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold">{aiStats.totalProcessed}</div>
+                <div className="text-xs opacity-90">Total Processed</div>
               </div>
-            ) : (
-              reviewMessages.map(msg => (
-                <div key={msg.id} className={`p-4 hover:bg-white/5 transition-colors ${
-                  msg.status === 'urgent' ? 'bg-red-500/5' : ''
+              <div className="text-center">
+                <div className="text-2xl font-bold">{aiStats.todayProcessed}</div>
+                <div className="text-xs opacity-90">Today</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold">{aiStats.successRate}%</div>
+                <div className="text-xs opacity-90">Success Rate</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold">{aiStats.avgResponseTime}s</div>
+                <div className="text-xs opacity-90">Avg Response</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold">{aiStats.autoScheduled}</div>
+                <div className="text-xs opacity-90">Auto-Scheduled</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold">{aiStats.quotesGenerated}</div>
+                <div className="text-xs opacity-90">Quotes Made</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold">{aiStats.escalated}</div>
+                <div className="text-xs opacity-90">Escalated</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-400">{aiStats.activeTasks}</div>
+                <div className="text-xs opacity-90">Active Now</div>
+              </div>
+            </div>
+
+            {/* AI Activity Graph - Real activity based on message timestamps */}
+            <div className="mt-4 pt-4 border-t border-white/20">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm opacity-90">AI Activity (Last 24h)</span>
+                <span className="text-xs opacity-75">Total: {messages.length} messages</span>
+              </div>
+              <div className="flex items-end gap-1 h-12">
+                {Array.from({length: 24}, (_, i) => {
+                  const hour = new Date().getHours() - 23 + i;
+                  const hourMessages = messages.filter(m => {
+                    const msgHour = new Date(m.created_at).getHours();
+                    return msgHour === (hour < 0 ? hour + 24 : hour);
+                  }).length;
+                  const maxMessages = Math.max(...Array.from({length: 24}, (_, j) => {
+                    const h = new Date().getHours() - 23 + j;
+                    return messages.filter(m => {
+                      const mh = new Date(m.created_at).getHours();
+                      return mh === (h < 0 ? h + 24 : h);
+                    }).length;
+                  }), 1);
+                  return (
+                    <div 
+                      key={i} 
+                      className="flex-1 bg-white/30 rounded-t transition-all hover:bg-white/50"
+                      style={{ height: `${(hourMessages/maxMessages)*100}%` }}
+                      title={`${hourMessages} messages`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Filter Tabs */}
+          <div className={`glass rounded-xl p-1 ${isMobile ? 'grid grid-cols-2 gap-2 p-2' : 'flex gap-1'}`}>
+            {[
+              { id: 'all', label: 'All Messages', count: messages.length, icon: MessageSquare },
+              { id: 'processed', label: 'AI Processed', count: processedMessages.length, icon: CheckCircle2 },
+              { id: 'review', label: 'Needs Review', count: reviewMessages.length, icon: AlertCircle },
+              { id: 'urgent', label: 'Urgent', count: messages.filter(m => m.status === 'urgent').length, icon: Zap }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveFilter(tab.id)}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all ${
+                  activeFilter === tab.id
+                    ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg'
+                    : 'text-gray-400 hover:bg-white/10'
+                }`}
+              >
+                <tab.icon size={18} />
+                <span className="font-medium">{tab.label}</span>
+                <span className={`px-2 py-0.5 text-xs rounded-full ${
+                  activeFilter === tab.id
+                    ? 'bg-white/20 text-white'
+                    : 'bg-gray-500/20 text-gray-400'
                 }`}>
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-gray-100">{msg.from_name}</span>
-                        <span className={`px-2 py-0.5 text-xs rounded-full flex items-center gap-1 ${
-                          msg.status === 'urgent' 
-                            ? 'bg-red-500/20 text-red-400' 
-                            : 'bg-yellow-500/20 text-yellow-400'
-                        }`}>
-                          {msg.status === 'urgent' && <Zap size={10} />}
-                          {msg.status === 'urgent' ? 'Urgent' : 'Review Required'}
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className={isMobile ? 'space-y-4' : 'grid grid-cols-1 lg:grid-cols-2 gap-6'}>
+            {/* AI Processed Section */}
+            <div className="glass card-modern rounded-xl">
+              <div className="p-4 border-b border-white/10 bg-gradient-to-r from-green-500/10 to-blue-500/10">
+                <h3 className="font-semibold text-gray-100 flex items-center gap-2">
+                  <CheckCircle2 size={20} className="text-green-400" />
+                  AI Processed ({processedMessages.length})
+                </h3>
+                <p className="text-sm text-gray-400">Successfully handled by AI</p>
+              </div>
+              
+              <div className="divide-y divide-white/10 max-h-[600px] overflow-y-auto">
+                {processedMessages.length === 0 ? (
+                  <div className="p-8 text-center text-gray-500">
+                    <Bot size={48} className="mx-auto mb-2 opacity-50" />
+                    <p>No processed messages yet</p>
+                  </div>
+                ) : (
+                  processedMessages.map(msg => (
+                    <div key={msg.id} className="p-4 hover:bg-white/5 transition-colors">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium text-gray-100">{msg.from_name}</span>
+                            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full flex items-center gap-1">
+                              <CheckCircle2 size={10} />
+                              AI Handled
+                            </span>
+                            {msg.confidence && (
+                              <span className="text-xs text-gray-500">
+                                {msg.confidence}% confidence
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-400 mb-2">{msg.message}</p>
+                          
+                          {/* AI Action Taken */}
+                          <div className="bg-blue-500/10 rounded-lg p-3 mb-2 border border-blue-500/20">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Bot size={14} className="text-blue-400" />
+                              <span className="text-xs font-medium text-blue-300">AI Action</span>
+                            </div>
+                            <p className="text-sm text-gray-300">{msg.aiAction || 'Processed automatically'}</p>
+                          </div>
+
+                          {/* Admin Actions - WITH DELETE BUTTON */}
+                          <div className="flex gap-2">
+                            <button className="px-3 py-1 text-xs glass text-gray-300 rounded hover:bg-white/10">
+                              View Details
+                            </button>
+                            
+                            <button 
+                              onClick={() => deleteMessage(msg.id, msg.from_name)}
+                              className="px-3 py-1 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 flex items-center gap-1"
+                            >
+                              <Trash2 size={10} />
+                              Delete
+                            </button>
+                            
+                            {msg.status === 'processed' && (
+                              <>
+                                <button 
+                                  onClick={() => approveAction(msg.id)}
+                                  className="px-3 py-1 text-xs bg-green-500/20 text-green-400 rounded hover:bg-green-500/30"
+                                >
+                                  Approve
+                                </button>
+                                <button 
+                                  onClick={() => rejectAction(msg.id)}
+                                  className="px-3 py-1 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30"
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {new Date(msg.created_at).toLocaleTimeString()}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-400 mb-2">{msg.message}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
 
-                      {/* Action Buttons - WITH DELETE BUTTON */}
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => processMessageWithAI(msg)}
-                          className="px-3 py-1 text-xs bg-purple-500/20 text-purple-400 rounded hover:bg-purple-500/30 flex items-center gap-1"
-                        >
-                          <Bot size={12} />
-                          Process with AI
-                        </button>
-                        <button className="px-3 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30">
-                          Manual Reply
-                        </button>
-                        <button className="px-3 py-1 text-xs glass text-gray-300 rounded hover:bg-white/10">
-                          Create Job
-                        </button>
-                        
-                        {/* DELETE BUTTON */}
-                        <button 
-                          onClick={() => deleteMessage(msg.id, msg.from_name)}
-                          className="px-3 py-1 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 flex items-center gap-1"
-                        >
-                          <Trash2 size={10} />
-                          Delete
-                        </button>
+            {/* Needs Review Section */}
+            <div className="glass card-modern rounded-xl">
+              <div className="p-4 border-b border-white/10 bg-gradient-to-r from-yellow-500/10 to-red-500/10">
+                <h3 className="font-semibold text-gray-100 flex items-center gap-2">
+                  <AlertCircle size={20} className="text-yellow-400" />
+                  Needs Admin Review ({reviewMessages.length})
+                </h3>
+                <p className="text-sm text-gray-400">Requires manual intervention</p>
+              </div>
+              
+              <div className="divide-y divide-white/10 max-h-[600px] overflow-y-auto">
+                {reviewMessages.length === 0 ? (
+                  <div className="p-8 text-center text-gray-500">
+                    <CheckCircle2 size={48} className="mx-auto mb-2 opacity-50" />
+                    <p>All messages processed!</p>
+                  </div>
+                ) : (
+                  reviewMessages.map(msg => (
+                    <div key={msg.id} className={`p-4 hover:bg-white/5 transition-colors ${
+                      msg.status === 'urgent' ? 'bg-red-500/5' : ''
+                    }`}>
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium text-gray-100">{msg.from_name}</span>
+                            <span className={`px-2 py-0.5 text-xs rounded-full flex items-center gap-1 ${
+                              msg.status === 'urgent' 
+                                ? 'bg-red-500/20 text-red-400' 
+                                : 'bg-yellow-500/20 text-yellow-400'
+                            }`}>
+                              {msg.status === 'urgent' && <Zap size={10} />}
+                              {msg.status === 'urgent' ? 'Urgent' : 'Review Required'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-400 mb-2">{msg.message}</p>
+
+                          {/* Action Buttons - WITH DELETE BUTTON */}
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => processMessageWithAI(msg)}
+                              className="px-3 py-1 text-xs bg-purple-500/20 text-purple-400 rounded hover:bg-purple-500/30 flex items-center gap-1"
+                            >
+                              <Bot size={12} />
+                              Process with AI
+                            </button>
+                            <button className="px-3 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30">
+                              Manual Reply
+                            </button>
+                            <button className="px-3 py-1 text-xs glass text-gray-300 rounded hover:bg-white/10">
+                              Create Job
+                            </button>
+                            
+                            <button 
+                              onClick={() => deleteMessage(msg.id, msg.from_name)}
+                              className="px-3 py-1 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 flex items-center gap-1"
+                            >
+                              <Trash2 size={10} />
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {new Date(msg.created_at).toLocaleTimeString()}
+                        </span>
                       </div>
                     </div>
-                    <span className="text-xs text-gray-500">
-                      {new Date(msg.created_at).toLocaleTimeString()}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
+                  ))
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
-      {/* Processing Overlay */}
-      {isProcessing && (
+      {/* Processing Overlay - Only show in messages view */}
+      {isProcessing && viewMode === 'messages' && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
           <div className="glass rounded-xl shadow-2xl p-8 max-w-sm w-full">
             <div className="text-center">
