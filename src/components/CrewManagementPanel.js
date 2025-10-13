@@ -159,33 +159,24 @@ const loadCrewMembers = async () => {
   try {
     const crewData = await supabase.fetchData('crew_members');
     
-    // Get stored names and teams from localStorage
-    const crewMetadata = JSON.parse(localStorage.getItem('crew_metadata') || '{}');
-    
-    const processedCrew = (crewData || []).map(member => {
-      const metadata = crewMetadata[member.employee_id] || {};
-      return {
-        ...member,
-        // Use metadata for name and team
-        name: metadata.name || member.employee_id || 'Unknown',
-        team: metadata.team || 'Unassigned',
-        // Map your actual columns to expected names
-        hours_worked: member.hours || 0,        // Map hours → hours_worked
-        jobs_completed: member.jobs || 0,       // Map jobs → jobs_completed
-        // Keep existing columns
-        status: member.status || 'active',
-        is_active: member.is_active !== false,
-        rating: member.rating || 5.0,
-        productivity: member.productivity || 100,
-        on_time: member.on_time || 100,
-        revenue: member.revenue || 0,
-        hourly_rate: member.hourly_rate || 25,
-        phone: member.phone || '(555) 000-0000',
-        email: member.email || '',
-        role: member.role || 'crew',
-        employee_id: member.employee_id || 'EMP' + Math.floor(Math.random() * 10000)
-      };
-    });
+    const processedCrew = (crewData || []).map(member => ({
+      ...member,
+      name: member.name || 'Unknown',              // Use actual name from database
+      team: member.team || 'Unassigned',           // Use actual team from database
+      hours_worked: member.hours || 0,             // Map hours to hours_worked
+      jobs_completed: member.jobs || 0,            // Map jobs to jobs_completed
+      status: member.status || 'active',
+      is_active: member.is_active !== false,
+      rating: member.rating || 5.0,
+      productivity: member.productivity || 100,
+      on_time: member.on_time || 100,
+      revenue: member.revenue || 0,
+      hourly_rate: member.hourly_rate || 25,
+      phone: member.phone || '(555) 000-0000',
+      email: member.email || '',
+      role: member.role || 'crew',
+      employee_id: member.employee_id || 'EMP' + Math.floor(Math.random() * 10000)
+    }));
     setCrews(processedCrew);
   } catch (error) {
     console.error('Error loading crew:', error);
@@ -193,8 +184,8 @@ const loadCrewMembers = async () => {
   } finally {
     setLoading(false);
   }
+  
 };
-
   const showMessage = (type, text) => {
     setMessage({ type, text });
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
@@ -218,16 +209,10 @@ const handleAddCrew = async () => {
 
   setLoading(true);
   try {
-    // Store name and team in localStorage since they're not in your database
-    const crewMetadata = JSON.parse(localStorage.getItem('crew_metadata') || '{}');
-    crewMetadata[formData.employeeId.toUpperCase()] = {
-      name: formData.name,
-      team: formData.team || 'Team Alpha'
-    };
-    localStorage.setItem('crew_metadata', JSON.stringify(crewMetadata));
-
-    // Create member using ONLY columns that exist in YOUR database
+    // Create member with name included (it's required in your database)
     const newMember = {
+      name: formData.name,                    // ADD THIS BACK - it's required!
+      team: formData.team || 'Team Alpha',    // ADD THIS BACK - it likely exists too
       employee_id: formData.employeeId.toUpperCase(),
       pin: formData.pin,
       email: formData.email || null,
@@ -238,13 +223,13 @@ const handleAddCrew = async () => {
       is_active: true,
       clock_status: 'clocked_out',
       rating: 5.0,
-      hours: 0,           // Changed from hours_worked
-      jobs: 0,            // Changed from jobs_completed
-      productivity: 100,   // Added - you have this column
-      on_time: 100,       // Added - you have this column
-      revenue: 0,         // Added - you have this column
+      hours: 0,           
+      jobs: 0,            
+      productivity: 100,   
+      on_time: 100,       
+      revenue: 0,         
       created_at: new Date().toISOString()
-      // REMOVED: name, team, jobs_completed_today
+      // ONLY remove: jobs_completed_today (this field doesn't exist)
     };
 
     const result = await supabase.insertData('crew_members', newMember);
