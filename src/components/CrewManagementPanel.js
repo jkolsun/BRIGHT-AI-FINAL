@@ -154,33 +154,46 @@ const CrewManagementPanel = ({ isMobile }) => {
     }));
   };
 
-  const loadCrewMembers = async () => {
-    setLoading(true);
-    try {
-      const crewData = await supabase.fetchData('crew_members');
-      const processedCrew = (crewData || []).map(member => ({
+const loadCrewMembers = async () => {
+  setLoading(true);
+  try {
+    const crewData = await supabase.fetchData('crew_members');
+    
+    // Get stored names and teams from localStorage
+    const crewMetadata = JSON.parse(localStorage.getItem('crew_metadata') || '{}');
+    
+    const processedCrew = (crewData || []).map(member => {
+      const metadata = crewMetadata[member.employee_id] || {};
+      return {
         ...member,
-        name: member.name || 'Unknown',
-        team: member.team || 'Unassigned',
+        // Use metadata for name and team
+        name: metadata.name || member.employee_id || 'Unknown',
+        team: metadata.team || 'Unassigned',
+        // Map your actual columns to expected names
+        hours_worked: member.hours || 0,        // Map hours → hours_worked
+        jobs_completed: member.jobs || 0,       // Map jobs → jobs_completed
+        // Keep existing columns
         status: member.status || 'active',
         is_active: member.is_active !== false,
         rating: member.rating || 5.0,
-        hours_worked: member.hours_worked || 0,
-        jobs_completed: member.jobs_completed || 0,
+        productivity: member.productivity || 100,
+        on_time: member.on_time || 100,
+        revenue: member.revenue || 0,
         hourly_rate: member.hourly_rate || 25,
         phone: member.phone || '(555) 000-0000',
         email: member.email || '',
         role: member.role || 'crew',
-        employee_id: member.employee_id || member.employeeId || 'EMP' + Math.floor(Math.random() * 10000)
-      }));
-      setCrews(processedCrew);
-    } catch (error) {
-      console.error('Error loading crew:', error);
-      showMessage('error', 'Failed to load crew members');
-    } finally {
-      setLoading(false);
-    }
-  };
+        employee_id: member.employee_id || 'EMP' + Math.floor(Math.random() * 10000)
+      };
+    });
+    setCrews(processedCrew);
+  } catch (error) {
+    console.error('Error loading crew:', error);
+    showMessage('error', 'Failed to load crew members');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
@@ -197,130 +210,126 @@ const CrewManagementPanel = ({ isMobile }) => {
     return String(Math.floor(Math.random() * 10000)).padStart(4, '0');
   };
 
-  const handleAddCrew = async () => {
-    if (!formData.name || !formData.employeeId || !formData.pin) {
-      showMessage('error', 'Please fill in all required fields');
-      return;
-    }
+const handleAddCrew = async () => {
+  if (!formData.name || !formData.employeeId || !formData.pin) {
+    showMessage('error', 'Please fill in all required fields');
+    return;
+  }
 
-    setLoading(true);
-    try {
-      // Create the new member object without company_id
-      const newMember = {
-        name: formData.name,
-        employee_id: formData.employeeId.toUpperCase(), // Ensure uppercase
-        pin: formData.pin,
-        email: formData.email || null,
-        phone: formData.phone || null,
-        team: formData.team || 'Team Alpha',
-        role: formData.role || 'crew',
-        hourly_rate: parseFloat(formData.hourlyRate) || 25,
-        status: 'active',
-        is_active: true,
-        clock_status: 'clocked_out',
-        rating: 5.0,
-        hours_worked: 0,
-        jobs_completed: 0,
-        jobs_completed_today: 0,
-        created_at: new Date().toISOString()
-        // Removed company_id - let supabase.js handle it
+  setLoading(true);
+  try {
+    // Store name and team in localStorage since they're not in your database
+    const crewMetadata = JSON.parse(localStorage.getItem('crew_metadata') || '{}');
+    crewMetadata[formData.employeeId.toUpperCase()] = {
+      name: formData.name,
+      team: formData.team || 'Team Alpha'
+    };
+    localStorage.setItem('crew_metadata', JSON.stringify(crewMetadata));
+
+    // Create member using ONLY columns that exist in YOUR database
+    const newMember = {
+      employee_id: formData.employeeId.toUpperCase(),
+      pin: formData.pin,
+      email: formData.email || null,
+      phone: formData.phone || null,
+      role: formData.role || 'crew',
+      hourly_rate: parseFloat(formData.hourlyRate) || 25,
+      status: 'active',
+      is_active: true,
+      clock_status: 'clocked_out',
+      rating: 5.0,
+      hours: 0,           // Changed from hours_worked
+      jobs: 0,            // Changed from jobs_completed
+      productivity: 100,   // Added - you have this column
+      on_time: 100,       // Added - you have this column
+      revenue: 0,         // Added - you have this column
+      created_at: new Date().toISOString()
+      // REMOVED: name, team, jobs_completed_today
+    };
+
+    const result = await supabase.insertData('crew_members', newMember);
+    
+    if (result) {
+      showMessage('success', `${formData.name} added successfully! Employee ID: ${formData.employeeId}, PIN: ${formData.pin}`);
+      
+      // Reset form
+      setShowAddForm(false);
+      setFormData({
+        name: '',
+        employeeId: '',
+        pin: '',
+        email: '',
+        phone: '',
+        team: 'Team Alpha',
+        role: 'crew',
+        hourlyRate: '',
+        startDate: new Date().toISOString().split('T')[0]
+      });
+      loadCrewMembers();
+    } else {
+      showMessage('error', 'Failed to add crew member. Please try again.');
+    }
+  } catch (error) {
+    console.error('Error adding crew:', error);
+    showMessage('error', 'Failed to add crew member: ' + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleUpdateCrew = async () => {
+  if (!editModalData) return;
+
+  setLoading(true);
+  try {
+    // Update metadata in localStorage
+    const crewMetadata = JSON.parse(localStorage.getItem('crew_metadata') || '{}');
+    if (editModalData.name || editModalData.team) {
+      crewMetadata[editModalData.employee_id] = {
+        name: editModalData.name || crewMetadata[editModalData.employee_id]?.name,
+        team: editModalData.team || crewMetadata[editModalData.employee_id]?.team
       };
-
-      const result = await supabase.insertData('crew_members', newMember);
-      
-      if (result) {
-        showMessage('success', `${formData.name} added successfully! Employee ID: ${formData.employeeId}, PIN: ${formData.pin}`);
-        
-        // Reset form
-        setShowAddForm(false);
-        setFormData({
-          name: '',
-          employeeId: '',
-          pin: '',
-          email: '',
-          phone: '',
-          team: 'Team Alpha',
-          role: 'crew',
-          hourlyRate: '',
-          startDate: new Date().toISOString().split('T')[0]
-        });
-        loadCrewMembers();
-      } else {
-        showMessage('error', 'Failed to add crew member. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error adding crew:', error);
-      // Show more specific error message
-      if (error.message.includes('duplicate')) {
-        showMessage('error', 'Employee ID already exists');
-      } else if (error.message.includes('column')) {
-        showMessage('error', 'Database configuration issue. Contact support.');
-      } else {
-        showMessage('error', 'Failed to add crew member: ' + error.message);
-      }
-    } finally {
-      setLoading(false);
+      localStorage.setItem('crew_metadata', JSON.stringify(crewMetadata));
     }
-  };
 
-  // FIXED UPDATE METHOD
-  const handleUpdateCrew = async () => {
-    if (!editModalData) return;
-
-    setLoading(true);
-    try {
-      // Prepare updates object with proper field names
-      const updates = {};
-      
-      // Only include fields that have changed and are not empty
-      if (editModalData.name) updates.name = editModalData.name;
-      if (editModalData.email !== undefined) updates.email = editModalData.email || null;
-      if (editModalData.phone !== undefined) updates.phone = editModalData.phone || null;
-      if (editModalData.team) updates.team = editModalData.team;
-      if (editModalData.role) updates.role = editModalData.role;
-      if (editModalData.hourly_rate !== undefined) {
-        updates.hourly_rate = parseFloat(editModalData.hourly_rate) || 25;
-      }
-
-      // Direct Supabase update with better error handling
-      const response = await fetch(
-        `${supabase.url}/rest/v1/crew_members?id=eq.${editModalData.id}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': supabase.key,
-            'Authorization': `Bearer ${supabase.key}`,
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify(updates)
-        }
-      );
-
-      if (response.ok) {
-        const updatedData = await response.json();
-        showMessage('success', 'Crew member updated successfully');
-        setEditModalData(null);
-        loadCrewMembers();
-      } else {
-        const errorText = await response.text();
-        console.error('Update error:', errorText);
-        
-        // Try to parse error message
-        try {
-          const errorObj = JSON.parse(errorText);
-          showMessage('error', `Update failed: ${errorObj.message || 'Unknown error'}`);
-        } catch {
-          showMessage('error', 'Failed to update crew member. Check your Supabase configuration.');
-        }
-      }
-    } catch (error) {
-      console.error('Error updating crew:', error);
-      showMessage('error', `Error: ${error.message}`);
-    } finally {
-      setLoading(false);
+    // Prepare updates for database (without name/team)
+    const updates = {};
+    
+    if (editModalData.email !== undefined) updates.email = editModalData.email || null;
+    if (editModalData.phone !== undefined) updates.phone = editModalData.phone || null;
+    if (editModalData.role) updates.role = editModalData.role;
+    if (editModalData.hourly_rate !== undefined) {
+      updates.hourly_rate = parseFloat(editModalData.hourly_rate) || 25;
     }
-  };
+
+    const response = await fetch(
+      `${supabase.url}/rest/v1/crew_members?id=eq.${editModalData.id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabase.key,
+          'Authorization': `Bearer ${supabase.key}`,
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify(updates)
+      }
+    );
+
+    if (response.ok) {
+      showMessage('success', 'Crew member updated successfully');
+      setEditModalData(null);
+      loadCrewMembers();
+    } else {
+      showMessage('error', 'Failed to update crew member');
+    }
+  } catch (error) {
+    console.error('Error updating crew:', error);
+    showMessage('error', `Error: ${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // DELETE CREW MEMBER FUNCTION
   const handleDeleteCrew = async (crewId, crewName) => {
@@ -383,40 +392,34 @@ const CrewManagementPanel = ({ isMobile }) => {
 
   // ENHANCED TRANSFER METHOD
   const handleTeamTransfer = async (crewId, currentTeam, newTeam, crewName) => {
-    if (currentTeam === newTeam) {
-      showMessage('error', 'Please select a different team');
-      return;
+  if (currentTeam === newTeam) {
+    showMessage('error', 'Please select a different team');
+    return;
+  }
+
+  setLoading(true);
+  try {
+    // Update team in localStorage metadata
+    const crewMetadata = JSON.parse(localStorage.getItem('crew_metadata') || '{}');
+    const crewMember = crews.find(c => c.id === crewId);
+    
+    if (crewMember) {
+      crewMetadata[crewMember.employee_id] = {
+        ...crewMetadata[crewMember.employee_id],
+        team: newTeam
+      };
+      localStorage.setItem('crew_metadata', JSON.stringify(crewMetadata));
     }
 
-    setLoading(true);
-    try {
-      const response = await fetch(
-        `${supabase.url}/rest/v1/crew_members?id=eq.${crewId}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': supabase.key,
-            'Authorization': `Bearer ${supabase.key}`,
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify({ team: newTeam })
-        }
-      );
-
-      if (response.ok) {
-        showMessage('success', `${crewName} transferred from ${currentTeam} to ${newTeam}`);
-        loadCrewMembers();
-      } else {
-        showMessage('error', 'Failed to transfer crew member');
-      }
-    } catch (error) {
-      console.error('Error transferring crew member:', error);
-      showMessage('error', 'Failed to transfer crew member');
-    } finally {
-      setLoading(false);
-    }
-  };
+    showMessage('success', `${crewName} transferred from ${currentTeam} to ${newTeam}`);
+    loadCrewMembers();
+  } catch (error) {
+    console.error('Error transferring crew member:', error);
+    showMessage('error', 'Failed to transfer crew member');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleResetPin = async (crewId, crewName) => {
     const newPin = generatePin();

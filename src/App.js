@@ -689,34 +689,64 @@ const SchedulingView = ({ isMobile }) => {
   };
 
   const handleAddJob = async () => {
-    if (!newJob.customer || !newJob.type) {
-      alert('Please fill in customer and job type');
-      return;
+  if (!newJob.customer || !newJob.type) {
+    alert('Please fill in customer and job type');
+    return;
+  }
+  
+  // Create customer data with only available fields
+  const customerData = {};
+  if (newJob.customer?.trim()) customerData.name = newJob.customer.trim();
+  if (newJob.phone?.trim()) customerData.phone = newJob.phone.trim();
+  if (newJob.address?.trim()) customerData.address = newJob.address.trim();
+  
+  // Only try to create customer if we have some data
+  if (Object.keys(customerData).length > 0) {
+    try {
+      if (customerData.phone) {
+        // Check if customer exists by phone
+        const existingCustomers = await supabase.fetchData('customers');
+        const existing = existingCustomers?.find(c => c.phone === customerData.phone);
+        
+        if (!existing) {
+          // Create new customer
+          await supabase.insertData('customers', customerData);
+        }
+      } else {
+        // No phone, just create (might create duplicates)
+        await supabase.insertData('customers', customerData);
+      }
+    } catch (error) {
+      console.log('Customer creation failed:', error);
+      // Don't block job creation
     }
-    
-    const success = await addNewJob({
-      ...newJob,
-      status: 'Scheduled'
+  }
+  
+  // Continue with job creation
+  const success = await addNewJob({
+    ...newJob,
+    customer_phone: newJob.phone || null,
+    status: 'Scheduled'
+  });
+  
+  if (success) {
+    alert('Job added successfully!');
+    setNewJob({
+      customer: '',
+      type: '',
+      address: '',
+      crew: 'Team Alpha',
+      price: '',
+      instructions: '',
+      phone: '',
+      equipment: 'Zero Turn',
+      date: new Date().toISOString().split('T')[0],
+      time: '09:00'
     });
-    
-    if (success) {
-      alert('Job added successfully!');
-      setNewJob({
-        customer: '',
-        type: '',
-        address: '',
-        crew: 'Team Alpha',
-        price: '',
-        instructions: '',
-        phone: '',
-        equipment: 'Zero Turn',
-        date: new Date().toISOString().split('T')[0],
-        time: '09:00'
-      });
-    } else {
-      alert('Error adding job. Please try again.');
-    }
-  };
+  } else {
+    alert('Error adding job. Please try again.');
+  }
+};
 
 const CalendarView = ({ isMobile }) => {
   // Step 3: Add these state variables
