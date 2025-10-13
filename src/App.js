@@ -5,7 +5,7 @@ import {
   Zap, Phone, RefreshCw, ChevronLeft, Home, Briefcase, 
   Activity, LogOut, ChevronRight, Filter, Download, Edit, Loader,
   Mic, MicOff, Cloud, CloudRain, Sun, Bot, Cpu, AlertCircle, Menu, X,
-  Mail
+  Mail, ArrowLeftRight
 } from 'lucide-react';
 
 // Import services
@@ -637,6 +637,82 @@ const SchedulingView = ({ isMobile }) => {
   const [viewMode, setViewMode] = useState('calendar'); // 'calendar', 'list', 'team', or 'recurring'
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTeam, setSelectedTeam] = useState('all');
+
+   const QuickJobTransfer = ({ job }) => {
+    const [showDropdown, setShowDropdown] = useState(false);
+    const [selectedTeam, setSelectedTeam] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleTransfer = async () => {
+      if (!selectedTeam || selectedTeam === (job.crew || job.assigned_crew)) return;
+      
+      setLoading(true);
+      try {
+        const result = await supabase.updateData('jobs', job.id, { 
+          assigned_crew: selectedTeam,
+          crew: selectedTeam,
+          team: selectedTeam
+        });
+        
+        if (result !== false) {
+          fetchAllData();
+          setShowDropdown(false);
+          setSelectedTeam('');
+        }
+      } catch (error) {
+        console.error('Transfer failed:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return (
+      <div className="relative">
+        {!showDropdown ? (
+          <button
+            onClick={() => setShowDropdown(true)}
+            className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 text-sm flex items-center gap-1"
+          >
+            <ArrowLeftRight size={14} />
+            Transfer
+          </button>
+        ) : (
+          <div className="absolute right-0 z-20 mt-1 bg-gray-800 border border-gray-700 rounded-lg p-2 min-w-[150px]">
+            <select
+              value={selectedTeam}
+              onChange={(e) => setSelectedTeam(e.target.value)}
+              className="w-full p-1 bg-gray-900 border border-gray-700 rounded text-white text-sm mb-2"
+            >
+              <option value="">Select team...</option>
+              <option value="Team Alpha">Team Alpha</option>
+              <option value="Team Beta">Team Beta</option>
+              <option value="Team Gamma">Team Gamma</option>
+              <option value="Team Delta">Team Delta</option>
+            </select>
+            <div className="flex gap-1">
+              <button
+                onClick={handleTransfer}
+                disabled={!selectedTeam || loading}
+                className="flex-1 px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 disabled:opacity-50"
+              >
+                {loading ? '...' : 'OK'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowDropdown(false);
+                  setSelectedTeam('');
+                }}
+                className="flex-1 px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+  // END OF TRANSFER COMPONENT
   
   // Get current week dates
   const getWeekDates = () => {
@@ -1285,6 +1361,7 @@ const CalendarView = ({ isMobile }) => {
               </p>
             </div>
             <div className="flex gap-2">
+              <QuickJobTransfer job={job} />
               <select
                 value={job.status}
                 onChange={(e) => updateJobStatus(job.id, e.target.value)}
