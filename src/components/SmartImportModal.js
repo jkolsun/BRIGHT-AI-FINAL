@@ -613,4 +613,77 @@ const SmartImportModal = ({ isOpen, onClose, importType, onImportComplete }) => 
   );
 };
 
+// Enhanced SmartImportModal.js additions
+
+const AIDataParser = {
+  async parseImportedData(fileContent, fileType) {
+    const ai = new OpenAIService();
+    
+    // Use AI to understand and map data fields
+    const analysis = await ai.analyzeDataStructure({
+      sample: fileContent.slice(0, 1000),
+      fileType: fileType
+    });
+    
+    const mappings = {
+      customer_fields: analysis.customerFields,
+      job_fields: analysis.jobFields,
+      address_fields: analysis.addressFields,
+      contact_fields: analysis.contactFields
+    };
+    
+    return this.processWithMappings(fileContent, mappings);
+  },
+  
+  async geocodeAddresses(addresses) {
+    // Batch geocode all addresses for route optimization
+    const geocoded = [];
+    
+    for (const address of addresses) {
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?` +
+          `format=json&q=${encodeURIComponent(address)}`
+        );
+        const data = await response.json();
+        
+        if (data && data[0]) {
+          geocoded.push({
+            address: address,
+            lat: parseFloat(data[0].lat),
+            lng: parseFloat(data[0].lon)
+          });
+        }
+      } catch (error) {
+        console.error(`Failed to geocode ${address}:`, error);
+      }
+      
+      // Rate limiting
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    return geocoded;
+  },
+  
+  async enrichCustomerData(customers) {
+    // Add AI-predicted service preferences and patterns
+    const enriched = [];
+    
+    for (const customer of customers) {
+      const enhanced = {
+        ...customer,
+        preferredTimeWindow: this.predictTimeWindow(customer),
+        serviceFrequency: this.predictFrequency(customer),
+        priorityLevel: this.calculatePriority(customer),
+        communicationPreference: this.predictCommPreference(customer)
+      };
+      
+      enriched.push(enhanced);
+    }
+    
+    return enriched;
+  }
+};
+
+
 export default SmartImportModal;

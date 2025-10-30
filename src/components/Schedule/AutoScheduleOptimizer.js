@@ -1,11 +1,18 @@
 // components/Schedule/AutoScheduleOptimizer.js
+/**
+ * Enhanced Auto Schedule Optimizer Component
+ * Integrates with AdvancedRouteOptimizer for morning/afternoon crew routing
+ */
+
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, MapPin, Clock, Users, TrendingUp, 
   Navigation, AlertCircle, CheckCircle, RefreshCw,
   Truck, DollarSign, Zap, Map, Play, Upload,
-  FileText, AlertTriangle
+  FileText, AlertTriangle, Sun, Sunset, Home,
+  ArrowRight, ArrowLeft, BarChart
 } from 'lucide-react';
+import AdvancedRouteOptimizer from '../../services/ai/advancedRouteOptimizer';
 import { OpenAIService } from '../../services/ai/openai';
 import { supabase } from '../../services/database/supabase';
 import n8nAutomation from '../../services/automation/n8n';
@@ -15,46 +22,72 @@ const AutoScheduleOptimizer = () => {
   const [crews, setCrews] = useState([]);
   const [optimizing, setOptimizing] = useState(false);
   const [optimizationResults, setOptimizationResults] = useState(null);
-  const [activeView, setActiveView] = useState('current'); // 'current' or 'optimized'
+  const [activeView, setActiveView] = useState('current');
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [homeBase, setHomeBase] = useState({
+    lat: 40.1023,
+    lng: -75.2743,
+    address: 'Company HQ'
+  });
   const [metrics, setMetrics] = useState({
     currentDistance: 0,
     optimizedDistance: 0,
     timeSaved: 0,
-    fuelSaved: 0
+    fuelSaved: 0,
+    costSaved: 0,
+    morningUtilization: 0,
+    afternoonUtilization: 0
   });
 
+  const routeOptimizer = new AdvancedRouteOptimizer();
   const ai = new OpenAIService();
 
   // Load data on component mount
   useEffect(() => {
-    loadTodaySchedule();
-  }, []);
+    loadScheduleData();
+    loadHomeBase();
+  }, [selectedDate]);
 
-  const loadTodaySchedule = async () => {
+  const loadHomeBase = async () => {
+    // Try to load home base from company settings
+    try {
+      const companyData = await supabase.fetchData('companies');
+      if (companyData && companyData[0]) {
+        setHomeBase({
+          lat: companyData[0].lat || 40.1023,
+          lng: companyData[0].lng || -75.2743,
+          address: companyData[0].address || 'Company HQ'
+        });
+      }
+    } catch (error) {
+      console.error('Error loading home base:', error);
+    }
+  };
+
+  const loadScheduleData = async () => {
     setLoading(true);
     setDataError(null);
     
     try {
-      // Get today's date
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Fetch jobs from database - adjust query based on your schema
+      // Fetch jobs for selected date
       const jobsData = await supabase.fetchData('jobs');
       const crewsData = await supabase.fetchData('crew_members');
       
-      // Filter for today's pending jobs or all pending if no date field
-      const todaysJobs = jobsData?.filter(job => 
-        job.status === 'pending' || job.status === 'scheduled'
-      ) || [];
+      // Filter for selected date's pending jobs
+      const dateJobs = jobsData?.filter(job => {
+        const jobDate = job.scheduled_date || job.date;
+        return (jobDate === selectedDate || !jobDate) && 
+               (job.status === 'pending' || job.status === 'scheduled');
+      }) || [];
       
-      if (todaysJobs.length === 0) {
+      if (dateJobs.length === 0) {
         setDataError('no-jobs');
         setJobs([]);
       } else {
-        // Ensure jobs have required fields for optimization
-        const validJobs = todaysJobs.map(job => ({
+        // Ensure jobs have required fields
+        const validJobs = dateJobs.map(job => ({
           ...job,
           priority: job.priority || 'normal',
           timeWindow: job.timeWindow || 'anytime',
@@ -67,7 +100,12 @@ const AutoScheduleOptimizer = () => {
       }
       
       if (crewsData && crewsData.length > 0) {
-        setCrews(crewsData);
+        // Enrich crew data with shift preferences
+        const enrichedCrews = crewsData.map((crew, index) => ({
+          ...crew,
+          shift: crew.shift || (index < crewsData.length / 2 ? 'morning' : 'afternoon')
+        }));
+        setCrews(enrichedCrews);
       } else {
         setDataError('no-crews');
         setCrews([]);
@@ -81,63 +119,46 @@ const AutoScheduleOptimizer = () => {
     }
   };
 
- const optimizeSchedule = async () => {
-  if (jobs.length === 0 || crews.length === 0) {
-    alert('Please ensure you have jobs and crews in the system before optimizing.');
-    return;
-  }
-
-  setOptimizing(true);
-  
-  try {
-    // First try n8n automation
-    const n8nResult = await n8nAutomation.requestScheduleOptimization();
-    
-    if (n8nResult.success) {
-      console.log('Schedule optimization triggered via n8n');
-      
-      // Wait a moment for n8n to process
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Reload the schedule to see changes
-      await loadTodaySchedule();
-      alert('✅ AI is optimizing your schedule. Refresh in a moment to see results.');
-      setOptimizing(false);
+  const optimizeSchedule = async () => {
+    if (jobs.length === 0 || crews.length === 0) {
+      alert('Please ensure you have jobs and crews in the system before optimizing.');
       return;
     }
+
+    setOptimizing(true);
     
-    // Fallback to direct OpenAI if n8n fails
-    console.log('Falling back to direct OpenAI optimization');
-    const result = await ai.optimizeSchedule(jobs, crews);
-      if (result.error) {
-        console.error('Optimization error:', result.error);
-        alert('Optimization failed. Please check your OpenAI API key in the .env file.');
-        setOptimizing(false);
-        return;
-      }
-
-      // Merge optimization results with original jobs
-      const optimizedJobs = jobs.map(job => {
-        const optimized = result.optimizedJobs?.find(opt => opt.id === job.id);
-        if (optimized) {
-          return { ...job, ...optimized };
-        }
-        return job;
-      });
-
-      setOptimizationResults(optimizedJobs);
+    try {
+      console.log('🚀 Starting advanced route optimization...');
       
-      // Update metrics
-      if (result.metrics) {
+      // Use the new AdvancedRouteOptimizer
+      const results = await routeOptimizer.optimizeCrewRoutes(
+        jobs,
+        crews,
+        new Date(selectedDate)
+      );
+      
+      if (results.success) {
+        setOptimizationResults(results);
+        
+        // Update metrics display
         setMetrics({
-          currentDistance: 100,
-          optimizedDistance: 100 - (result.metrics.distanceSaved || 20),
-          timeSaved: result.metrics.timeSaved || 90,
-          fuelSaved: (result.metrics.distanceSaved * 0.08) || 8.5
+          currentDistance: parseFloat(results.metrics.totalDistance) + parseFloat(results.metrics.distanceSaved),
+          optimizedDistance: parseFloat(results.metrics.totalDistance),
+          timeSaved: results.metrics.estimatedTimeSaved,
+          fuelSaved: parseFloat(results.metrics.estimatedFuelSaved),
+          costSaved: parseFloat(results.metrics.estimatedCostSaved),
+          morningUtilization: results.metrics.morningCrewUtilization,
+          afternoonUtilization: results.metrics.afternoonCrewUtilization
         });
+        
+        setActiveView('optimized');
+        
+        // Show success notification
+        console.log('✅ Optimization complete!', results.metrics);
+      } else {
+        throw new Error(results.error || 'Optimization failed');
       }
       
-      setActiveView('optimized');
     } catch (error) {
       console.error('Optimization failed:', error);
       alert('Failed to optimize schedule. Please try again.');
@@ -150,163 +171,116 @@ const AutoScheduleOptimizer = () => {
     if (!optimizationResults) return;
     
     try {
-      // Update each job in the database
-      for (const job of optimizationResults) {
-        await supabase.updateData('jobs', job.id, {
-          assignedCrew: job.assignedCrew,
-          estimatedStart: job.estimatedStart,
-          orderInRoute: job.orderInRoute,
-          optimized: true,
-          optimization_date: new Date().toISOString()
-        });
-      }
+      // Save optimization to database
+      await routeOptimizer.saveOptimization(optimizationResults);
       
-      setJobs(optimizationResults);
+      // Update local state
+      const updatedJobs = [];
+      
+      [...optimizationResults.morning, ...optimizationResults.afternoon].forEach(route => {
+        route.jobs.forEach(job => {
+          updatedJobs.push(job);
+        });
+      });
+      
+      setJobs(updatedJobs);
       setActiveView('current');
-      setOptimizationResults(null);
+      
       alert('✅ Schedule optimization applied successfully!');
+      
+      // Notify crews of updated schedules
+      await notifyCrews(optimizationResults);
+      
     } catch (error) {
       console.error('Failed to apply optimization:', error);
       alert('Failed to save optimization. Please try again.');
     }
   };
 
-  const JobCard = ({ job, index, isOptimized }) => {
-    const priorityColors = {
-      high: 'border-red-500 bg-red-50',
-      normal: 'border-gray-300 bg-white',
-      low: 'border-blue-300 bg-blue-50'
-    };
-
-    return (
-      <div className={`border-2 rounded-lg p-4 mb-3 ${priorityColors[job.priority] || priorityColors.normal} 
-        ${isOptimized ? 'shadow-lg transform scale-105' : ''} transition-all`}>
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-semibold">{index + 1}.</span>
-              <h4 className="font-semibold text-gray-800">{job.customer || job.customer_name}</h4>
-              {job.priority === 'high' && (
-                <span className="px-2 py-1 bg-red-500 text-white text-xs rounded">Priority</span>
-              )}
-            </div>
-            <div className="flex items-center gap-1 text-sm text-gray-600 mt-1">
-              <MapPin size={14} />
-              <span>{job.address || job.service_address || 'No address'}</span>
-            </div>
-            <div className="flex items-center gap-4 mt-2 text-sm">
-              <span className="flex items-center gap-1">
-                <Clock size={14} />
-                {job.duration} min
-              </span>
-              <span className="flex items-center gap-1">
-                <Users size={14} />
-                {job.assignedCrew || 'Unassigned'}
-              </span>
-              {job.estimatedStart && (
-                <span className="flex items-center gap-1 text-green-600 font-semibold">
-                  <Play size={14} />
-                  {job.estimatedStart}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-sm text-gray-500">{job.service || job.service_type}</div>
-            <div className="text-xs text-gray-400 mt-1">{job.timeWindow}</div>
-          </div>
-        </div>
-      </div>
-    );
+  const notifyCrews = async (results) => {
+    // Send notifications to crews about their optimized routes
+    for (const route of [...results.morning, ...results.afternoon]) {
+      // In production, send actual notifications via SMS/push
+      console.log(`Notifying ${route.crew} of ${route.totalJobs} jobs in ${route.shift} shift`);
+    }
   };
 
-  const MetricsCard = () => (
-    <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg p-6 mb-6">
-      <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-        <TrendingUp size={24} />
-        Optimization Results
-      </h3>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div>
-          <div className="text-3xl font-bold">{metrics.timeSaved}</div>
-          <div className="text-sm opacity-90">Minutes Saved</div>
-        </div>
-        <div>
-          <div className="text-3xl font-bold">{(metrics.currentDistance - metrics.optimizedDistance).toFixed(1)}</div>
-          <div className="text-sm opacity-90">Miles Reduced</div>
-        </div>
-        <div>
-          <div className="text-3xl font-bold">${(metrics.fuelSaved * 4.5).toFixed(0)}</div>
-          <div className="text-sm opacity-90">Fuel Savings</div>
-        </div>
-        <div>
-          <div className="text-3xl font-bold">{((1 - metrics.optimizedDistance / metrics.currentDistance) * 100).toFixed(0)}%</div>
-          <div className="text-sm opacity-90">More Efficient</div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Empty State Component
-  const EmptyState = () => {
-    const getEmptyMessage = () => {
-      if (dataError === 'no-jobs') {
-        return {
-          icon: <FileText size={48} className="text-gray-400" />,
-          title: "No Jobs Scheduled",
-          message: "Import your client jobs or create new jobs to start optimizing routes.",
-          action: "Go to Jobs → Import Data"
-        };
-      }
-      if (dataError === 'no-crews') {
-        return {
-          icon: <Users size={48} className="text-gray-400" />,
-          title: "No Crews Available",
-          message: "Add crew members to your system before optimizing schedules.",
-          action: "Go to Crews → Add Crew"
-        };
-      }
-      if (dataError === 'load-error') {
-        return {
-          icon: <AlertTriangle size={48} className="text-yellow-500" />,
-          title: "Failed to Load Data",
-          message: "There was an error loading your data. Please check your connection and try again.",
-          action: "Refresh Page"
-        };
-      }
-      return {
-        icon: <Calendar size={48} className="text-gray-400" />,
-        title: "Loading Schedule Data",
-        message: "Fetching your jobs and crews...",
-        action: null
-      };
-    };
-
-    const emptyInfo = getEmptyMessage();
-
+  // Component for displaying individual routes
+  const RouteCard = ({ route, shift }) => {
+    const shiftIcon = shift === 'morning' ? <Sun /> : <Sunset />;
+    const shiftColor = shift === 'morning' ? 'bg-yellow-50 border-yellow-200' : 'bg-purple-50 border-purple-200';
+    
     return (
-      <div className="bg-white rounded-lg shadow-md p-12 text-center">
-        <div className="flex justify-center mb-4">
-          {emptyInfo.icon}
+      <div className={`rounded-lg border p-6 ${shiftColor}`}>
+        <div className="flex justify-between items-start mb-4">
+          <div className="flex items-center gap-2">
+            {shiftIcon}
+            <h3 className="text-lg font-semibold">{route.crew}</h3>
+          </div>
+          <span className="text-sm font-medium">
+            {route.totalJobs} jobs | {route.totalDistance} miles
+          </span>
         </div>
-        <h2 className="text-xl font-semibold text-gray-800 mb-2">
-          {emptyInfo.title}
-        </h2>
-        <p className="text-gray-600 mb-4">
-          {emptyInfo.message}
-        </p>
-        {emptyInfo.action && (
-          <p className="text-blue-600 font-medium">
-            {emptyInfo.action}
-          </p>
-        )}
-        <button
-          onClick={loadTodaySchedule}
-          className="mt-6 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
-        >
-          <RefreshCw size={16} />
-          Refresh Data
-        </button>
+        
+        <div className="space-y-3">
+          {route.jobs.map((job, index) => (
+            <div key={job.id} className="bg-white rounded p-3 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-semibold">
+                    {job.orderInRoute}
+                  </div>
+                </div>
+                <div className="flex-grow">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium">{job.customer}</p>
+                      <p className="text-sm text-gray-600">{job.address}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{job.estimatedArrival}</p>
+                      <p className="text-xs text-gray-500">{job.duration} min</p>
+                    </div>
+                  </div>
+                  
+                  {index < route.jobs.length - 1 && (
+                    <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
+                      <Navigation size={12} />
+                      <span>{job.travelTime} min travel to next</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Show optimization insight for this job */}
+              {shift === 'morning' && index === 0 && (
+                <div className="mt-2 p-2 bg-yellow-100 rounded text-xs text-yellow-800">
+                  <ArrowLeft size={12} className="inline mr-1" />
+                  Starting farthest from base - working back
+                </div>
+              )}
+              
+              {shift === 'afternoon' && index === 0 && (
+                <div className="mt-2 p-2 bg-purple-100 rounded text-xs text-purple-800">
+                  <Home size={12} className="inline mr-1" />
+                  Starting near base - working outward
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        
+        {/* Route summary */}
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Route Efficiency</span>
+            <span className="font-semibold text-green-600">{route.efficiency}%</span>
+          </div>
+          <div className="flex justify-between text-sm mt-1">
+            <span className="text-gray-600">Est. Complete</span>
+            <span className="font-medium">{route.estimatedEnd}</span>
+          </div>
+        </div>
       </div>
     );
   };
@@ -314,209 +288,270 @@ const AutoScheduleOptimizer = () => {
   // Loading state
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="bg-white rounded-lg shadow-md p-12 text-center">
-          <RefreshCw className="animate-spin mx-auto mb-4" size={48} />
-          <h2 className="text-xl font-semibold text-gray-800">Loading Schedule Data...</h2>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="animate-spin text-green-600" size={48} />
+        <span className="ml-3 text-lg">Loading schedule data...</span>
       </div>
     );
   }
 
-  // No data state
-  if (jobs.length === 0 || crews.length === 0) {
-    return (
-      <div className="max-w-7xl mx-auto p-6">
-        <EmptyState />
-      </div>
-    );
-  }
-
-  // Get crew groups
-  const crewGroups = [...new Set(jobs.map(job => job.assignedCrew || 'Unassigned'))];
-
+  // Main render
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="p-6 bg-gray-50 min-h-screen">
       {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+          <Calendar className="text-green-600" />
+          AI Schedule Optimizer
+        </h1>
+        <p className="text-gray-600 mt-2">
+          Intelligent route optimization with morning/afternoon crew management
+        </p>
+      </div>
+
+      {/* Date Selector and Actions */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <Map className="text-blue-600" size={28} />
-              Auto-Schedule Optimizer
-            </h1>
-            <p className="text-gray-600 mt-1">
-              AI-powered route optimization for your {jobs.length} scheduled jobs
-            </p>
+          <div className="flex items-center gap-4">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="px-4 py-2 border rounded-lg"
+            />
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Home size={16} />
+              <span>{homeBase.address}</span>
+            </div>
           </div>
+          
           <div className="flex gap-3">
-            <button
-              onClick={loadTodaySchedule}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-            >
-              <RefreshCw size={16} />
-              Refresh
-            </button>
-            {activeView === 'optimized' && optimizationResults ? (
+            {activeView === 'current' ? (
+              <button
+                onClick={optimizeSchedule}
+                disabled={optimizing || jobs.length === 0}
+                className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50"
+              >
+                {optimizing ? (
+                  <>
+                    <RefreshCw className="animate-spin" size={20} />
+                    Optimizing...
+                  </>
+                ) : (
+                  <>
+                    <Zap size={20} />
+                    Optimize Routes
+                  </>
+                )}
+              </button>
+            ) : (
               <>
                 <button
                   onClick={() => setActiveView('current')}
                   className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
                 >
-                  View Original
+                  Cancel
                 </button>
                 <button
                   onClick={applyOptimization}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2"
                 >
                   <CheckCircle size={20} />
                   Apply Optimization
                 </button>
               </>
-            ) : (
-              <button
-                onClick={optimizeSchedule}
-                disabled={optimizing || jobs.length === 0}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                {optimizing ? (
-                  <>
-                    <RefreshCw className="animate-spin" size={20} />
-                    Optimizing with AI...
-                  </>
-                ) : (
-                  <>
-                    <Zap size={20} />
-                    Optimize Schedule
-                  </>
-                )}
-              </button>
             )}
           </div>
         </div>
+      </div>
 
-        {/* Quick Stats */}
-        <div className="flex gap-6 mt-4 text-sm">
-          <div className="flex items-center gap-2">
-            <Truck className="text-gray-400" size={18} />
-            <span className="text-gray-600">
-              {crews.length} Crews Active
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Calendar className="text-gray-400" size={18} />
-            <span className="text-gray-600">
-              {jobs.length} Jobs Today
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Clock className="text-gray-400" size={18} />
-            <span className="text-gray-600">
-              {jobs.reduce((acc, job) => acc + (job.duration || 60), 0)} Total Minutes
-            </span>
+      {/* Error States */}
+      {dataError && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="text-yellow-600" size={24} />
+            <div>
+              <h3 className="font-semibold text-yellow-900">
+                {dataError === 'no-jobs' ? 'No Jobs Scheduled' :
+                 dataError === 'no-crews' ? 'No Crews Available' :
+                 'Error Loading Data'}
+              </h3>
+              <p className="text-yellow-700 mt-1">
+                {dataError === 'no-jobs' ? 'Import jobs or create new ones to start optimizing.' :
+                 dataError === 'no-crews' ? 'Add crew members to optimize routes.' :
+                 'Please refresh and try again.'}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Optimization Metrics */}
-      {optimizationResults && activeView === 'optimized' && <MetricsCard />}
-
-      {/* Schedule View - Dynamic crew columns */}
-      <div className={`grid grid-cols-1 ${crewGroups.length > 1 ? 'lg:grid-cols-2' : ''} gap-6`}>
-        {crewGroups.map(crewName => (
-          <div key={crewName} className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Users className="text-blue-600" size={20} />
-                {crewName}
-              </h3>
-              <span className="text-sm text-gray-500">
-                {activeView === 'optimized' ? 'Optimized Route' : 'Current Route'}
-              </span>
+      {optimizationResults && activeView === 'optimized' && (
+        <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg shadow-lg p-6 mb-6 text-white">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <BarChart size={24} />
+            Optimization Results
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div>
+              <div className="text-3xl font-bold">{metrics.timeSaved}</div>
+              <div className="text-sm opacity-90">Minutes Saved</div>
             </div>
-            
-            <div className="space-y-2">
-              {(activeView === 'optimized' && optimizationResults ? optimizationResults : jobs)
-                .filter(job => (job.assignedCrew || 'Unassigned') === crewName)
-                .map((job, index) => (
-                  <JobCard 
-                    key={job.id} 
-                    job={job} 
-                    index={index}
-                    isOptimized={activeView === 'optimized'}
-                  />
-                ))}
+            <div>
+              <div className="text-3xl font-bold">{metrics.optimizedDistance}</div>
+              <div className="text-sm opacity-90">Total Miles</div>
             </div>
-
-            {activeView === 'optimized' && (
-              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded">
-                <div className="flex items-center gap-2 text-green-700">
-                  <CheckCircle size={18} />
-                  <span className="text-sm font-medium">
-                    Route optimized for maximum efficiency
-                  </span>
-                </div>
+            <div>
+              <div className="text-3xl font-bold">${metrics.costSaved}</div>
+              <div className="text-sm opacity-90">Fuel Cost Saved</div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold">
+                {optimizationResults.metrics.percentImprovement}%
               </div>
-            )}
+              <div className="text-sm opacity-90">More Efficient</div>
+            </div>
           </div>
-        ))}
-      </div>
-
-      {/* AI Insights */}
-      {jobs.length > 0 && (
-        <div className="bg-blue-50 rounded-lg p-6 mt-6">
-          <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
-            <Zap className="text-blue-600" size={20} />
-            AI Optimization Insights
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            <div className="flex items-start gap-2">
-              <CheckCircle className="text-green-600 mt-1" size={16} />
-              <div>
-                <div className="font-medium text-gray-800">Priority Jobs First</div>
-                <div className="text-gray-600">High-priority customers scheduled in optimal time windows</div>
+          
+          {/* Crew Utilization */}
+          <div className="mt-6 pt-4 border-t border-white/20">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white/10 rounded p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sun size={16} />
+                  <span className="text-sm font-medium">Morning Crews</span>
+                </div>
+                <div className="text-2xl font-bold">{metrics.morningUtilization}%</div>
+                <div className="text-xs opacity-75">Utilization</div>
               </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <CheckCircle className="text-green-600 mt-1" size={16} />
-              <div>
-                <div className="font-medium text-gray-800">Clustered Routes</div>
-                <div className="text-gray-600">Nearby properties grouped to minimize travel</div>
-              </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <CheckCircle className="text-green-600 mt-1" size={16} />
-              <div>
-                <div className="font-medium text-gray-800">Skill Matching</div>
-                <div className="text-gray-600">Crews assigned based on job requirements</div>
+              <div className="bg-white/10 rounded p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sunset size={16} />
+                  <span className="text-sm font-medium">Afternoon Crews</span>
+                </div>
+                <div className="text-2xl font-bold">{metrics.afternoonUtilization}%</div>
+                <div className="text-xs opacity-75">Utilization</div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Weekly Savings Projection */}
-      {metrics.timeSaved > 0 && activeView === 'optimized' && (
-        <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg p-6 mt-6">
-          <h3 className="text-xl font-bold mb-3">Weekly Impact Projection</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <div className="text-2xl font-bold">{(metrics.timeSaved * 5 / 60).toFixed(1)} hrs</div>
-              <div className="text-sm opacity-90">Time Saved/Week</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold">${(metrics.fuelSaved * 4.5 * 5).toFixed(0)}</div>
-              <div className="text-sm opacity-90">Fuel Savings/Week</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold">{((metrics.timeSaved * 5) / 45).toFixed(0)}</div>
-              <div className="text-sm opacity-90">Extra Jobs Possible</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold">${((metrics.timeSaved * 5 / 60) * 75).toFixed(0)}</div>
-              <div className="text-sm opacity-90">Revenue Potential</div>
+      {/* Routes Display */}
+      {optimizationResults && activeView === 'optimized' && (
+        <div className="space-y-6">
+          {/* Morning Routes */}
+          <div>
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Sun className="text-yellow-500" />
+              Morning Routes (Far → Near)
+            </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {optimizationResults.morning.map((route, index) => (
+                <RouteCard key={index} route={route} shift="morning" />
+              ))}
             </div>
           </div>
+
+          {/* Afternoon Routes */}
+          <div>
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Sunset className="text-purple-500" />
+              Afternoon Routes (Near → Far)
+            </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {optimizationResults.afternoon.map((route, index) => (
+                <RouteCard key={index} route={route} shift="afternoon" />
+              ))}
+            </div>
+          </div>
+
+          {/* Unassigned Jobs */}
+          {optimizationResults.unassignedJobs && optimizationResults.unassignedJobs.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-red-900 mb-3">
+                Unassigned Jobs ({optimizationResults.unassignedJobs.length})
+              </h3>
+              <p className="text-red-700 mb-3">
+                These jobs couldn't be fit into today's schedule. Consider adding more crews or rescheduling.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {optimizationResults.unassignedJobs.map(job => (
+                  <div key={job.id} className="bg-white p-3 rounded border border-red-200">
+                    <p className="font-medium">{job.customer}</p>
+                    <p className="text-sm text-gray-600">{job.address}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* AI Insights */}
+          {optimizationResults.insights && (
+            <div className="bg-blue-50 rounded-lg p-6">
+              <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                <Zap className="text-blue-600" size={20} />
+                AI Optimization Insights
+              </h3>
+              <ul className="space-y-2">
+                {optimizationResults.insights.map((insight, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <CheckCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={16} />
+                    <span className="text-blue-800">{insight}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Current Schedule View */}
+      {activeView === 'current' && jobs.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {crews.map(crew => {
+            const crewJobs = jobs.filter(job => 
+              job.assignedCrew === crew.id || job.assignedCrew === crew.name
+            );
+            
+            return (
+              <div key={crew.id} className="bg-white rounded-lg shadow-md p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Users className="text-blue-600" size={20} />
+                  {crew.name}
+                  <span className="text-sm text-gray-500 ml-auto">
+                    {crewJobs.length} jobs
+                  </span>
+                </h3>
+                
+                {crewJobs.length === 0 ? (
+                  <p className="text-gray-500 italic">No jobs assigned</p>
+                ) : (
+                  <div className="space-y-3">
+                    {crewJobs.map(job => (
+                      <div key={job.id} className="border rounded p-3 hover:bg-gray-50">
+                        <p className="font-medium">{job.customer}</p>
+                        <p className="text-sm text-gray-600">{job.address}</p>
+                        <div className="flex justify-between items-center mt-2">
+                          <span className={`text-xs px-2 py-1 rounded ${
+                            job.priority === 'high' ? 'bg-red-100 text-red-700' :
+                            job.priority === 'normal' ? 'bg-gray-100 text-gray-700' :
+                            'bg-green-100 text-green-700'
+                          }`}>
+                            {job.priority}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {job.duration} min
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

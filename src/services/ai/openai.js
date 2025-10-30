@@ -6,7 +6,7 @@ class OpenAIService {
   }
 
   // ============================================
-  // SCHEDULE OPTIMIZATION (NEW)
+  // SCHEDULE OPTIMIZATION (EXISTING)
   // ============================================
   async optimizeSchedule(jobs, crews, constraints = {}) {
     if (!this.apiKey) return { error: 'No API key configured' };
@@ -158,6 +158,17 @@ class OpenAIService {
         efficiency: 85
       }
     };
+  }
+
+  // Helper method for parsing optimization responses
+  parseOptimizationResponse(responseText, jobs, crews) {
+    try {
+      // Try to parse as JSON first
+      return JSON.parse(responseText);
+    } catch {
+      // If not JSON, create a basic optimization
+      return this.basicScheduleOptimization(jobs, crews);
+    }
   }
 
   // ============================================
@@ -385,83 +396,362 @@ class OpenAIService {
     }
   }
 
+  // ============================================
+  // GENERATE CUSTOMER MESSAGE (EXISTING)
+  // ============================================
   async generateCustomerMessage(context) {
-  if (!this.apiKey) return null;
+    if (!this.apiKey) return null;
 
-  const systemPrompt = `You are a friendly landscaping service assistant. 
-    Create personalized, conversational reminder messages that:
-    - Are warm and professional
-    - Reference their service history to show you remember them
-    - Make scheduling easy with clear CTAs
-    - Keep messages under 160 characters for SMS`;
+    const systemPrompt = `You are a friendly landscaping service assistant. 
+      Create personalized, conversational reminder messages that:
+      - Are warm and professional
+      - Reference their service history to show you remember them
+      - Make scheduling easy with clear CTAs
+      - Keep messages under 160 characters for SMS`;
 
-  const userPrompt = `Create a maintenance reminder for:
-    Customer: ${context.customer}
-    Service: ${context.service}
-    Last service: ${context.lastServiceDate.toLocaleDateString()}
-    Suggested date: ${context.suggestedDate.toLocaleDateString()}
-    Service frequency: Every ${context.frequency} days
-    Total services completed: ${context.history}`;
+    const userPrompt = `Create a maintenance reminder for:
+      Customer: ${context.customer}
+      Service: ${context.service}
+      Last service: ${context.lastServiceDate.toLocaleDateString()}
+      Suggested date: ${context.suggestedDate.toLocaleDateString()}
+      Service frequency: Every ${context.frequency} days
+      Total services completed: ${context.history}`;
 
-  try {
-    const response = await fetch(`${this.baseURL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: 100,
-        temperature: 0.7
-      })
-    });
+    try {
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          max_tokens: 100,
+          temperature: 0.7
+        })
+      });
 
-    const data = await response.json();
-    return data.choices[0].message.content;
-  } catch (error) {
-    console.error('Error generating message:', error);
-    return null;
+      const data = await response.json();
+      return data.choices[0].message.content;
+    } catch (error) {
+      console.error('Error generating message:', error);
+      return null;
+    }
   }
-}
 
-async analyzePredictivePatterns(customerHistory) {
-  if (!this.apiKey) return null;
+  // ============================================
+  // ANALYZE PREDICTIVE PATTERNS (EXISTING)
+  // ============================================
+  async analyzePredictivePatterns(customerHistory) {
+    if (!this.apiKey) return null;
 
-  const systemPrompt = `Analyze landscaping service patterns and predict:
-    1. Optimal service frequency
-    2. Churn risk indicators
-    3. Upsell opportunities
-    4. Seasonal service needs`;
+    const systemPrompt = `Analyze landscaping service patterns and predict:
+      1. Optimal service frequency
+      2. Churn risk indicators
+      3. Upsell opportunities
+      4. Seasonal service needs`;
 
-  try {
-    const response = await fetch(`${this.baseURL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4-turbo-preview',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: JSON.stringify(customerHistory) }
-        ],
-        response_format: { type: "json_object" }
-      })
-    });
+    try {
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4-turbo-preview',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: JSON.stringify(customerHistory) }
+          ],
+          response_format: { type: "json_object" }
+        })
+      });
 
-    const data = await response.json();
-    return JSON.parse(data.choices[0].message.content);
-  } catch (error) {
-    console.error('Error analyzing patterns:', error);
-    return null;
+      const data = await response.json();
+      return JSON.parse(data.choices[0].message.content);
+    } catch (error) {
+      console.error('Error analyzing patterns:', error);
+      return null;
+    }
   }
-}
+
+  // ============================================
+  // ENHANCED OPTIMIZATION WITH CONSTRAINTS (NEW)
+  // ============================================
+  async optimizeScheduleWithConstraints(jobs, crews, constraints) {
+    if (!this.apiKey) return { error: 'No API key configured' };
+
+    const systemPrompt = `You are an expert landscaping operations optimizer with deep knowledge of:
+    - Route optimization algorithms (TSP, VRP)
+    - Weather impact on landscaping work
+    - Crew skill matching
+    - Customer priority management
+    - Equipment and resource allocation
+    
+    CRITICAL ROUTING RULES:
+    1. MORNING CREWS: Must start at the FARTHEST jobs from home base and work their way BACK
+    2. AFTERNOON CREWS: Must start NEAR home base and work OUTWARD
+    3. This minimizes end-of-day travel when crews are tired
+    4. Account for traffic patterns (heavier in morning going out, evening coming back)`;
+
+    const userPrompt = `
+    HOME BASE: ${constraints.homeBase}
+    
+    JOBS TO SCHEDULE:
+    ${JSON.stringify(jobs.map(j => ({
+      id: j.id,
+      customer: j.customer,
+      address: j.address,
+      coordinates: { lat: j.lat, lng: j.lng },
+      priority: j.priority,
+      timeWindow: j.timeWindow,
+      duration: j.duration,
+      requiredSkills: j.requiredSkills,
+      equipment: j.equipment
+    })))}
+    
+    AVAILABLE CREWS:
+    ${JSON.stringify(crews.map(c => ({
+      id: c.id,
+      name: c.name,
+      shift: c.shift, // 'morning' or 'afternoon'
+      skills: c.skills,
+      currentLocation: c.currentLocation,
+      vehicleCapacity: c.vehicleCapacity
+    })))}
+    
+    CONSTRAINTS:
+    - Weather: ${constraints.weather}
+    - Traffic zones to avoid: ${constraints.trafficZones}
+    - Customer preferences: ${constraints.preferences}
+    
+    Return optimized schedule with:
+    1. Job assignments respecting morning/afternoon routing rules
+    2. Estimated arrival times
+    3. Total distance and time saved
+    4. Risk factors (weather delays, traffic)`;
+
+    try {
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4-turbo-preview',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.2,
+          max_tokens: 2000,
+          response_format: { type: "json_object" }
+        })
+      });
+
+      if (!response.ok) {
+        // Fallback to simpler optimization
+        return this.optimizeSchedule(jobs, crews, constraints);
+      }
+
+      const data = await response.json();
+      return JSON.parse(data.choices[0].message.content);
+    } catch (error) {
+      console.error('Enhanced optimization error:', error);
+      return this.optimizeSchedule(jobs, crews, constraints);
+    }
+  }
+
+  // ============================================
+  // WEATHER IMPACT ANALYSIS (NEW)
+  // ============================================
+  async analyzeWeatherImpact(weatherData, scheduledJobs) {
+    if (!this.apiKey) return { safeToWork: true, warnings: [] };
+
+    const prompt = `Analyze weather impact on landscaping schedule:
+    Weather: ${JSON.stringify(weatherData)}
+    Jobs: ${JSON.stringify(scheduledJobs)}
+    
+    Determine:
+    1. Which jobs should be rescheduled
+    2. Safety risks for crews
+    3. Equipment concerns
+    4. Customer communication needed
+    
+    Return as JSON with: { safeToWork: boolean, jobsToReschedule: [], warnings: [], notifications: [] }`;
+    
+    try {
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            { 
+              role: 'system', 
+              content: 'You are a landscaping safety advisor. Analyze weather conditions for outdoor work safety.' 
+            },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.3,
+          response_format: { type: "json_object" }
+        })
+      });
+
+      const data = await response.json();
+      return JSON.parse(data.choices[0].message.content);
+    } catch (error) {
+      console.error('Weather analysis error:', error);
+      return { safeToWork: true, warnings: [], jobsToReschedule: [] };
+    }
+  }
+
+  // ============================================
+  // GENERATE SCHEDULING INSIGHTS (NEW)
+  // ============================================
+  async generateSchedulingInsights(metrics) {
+    if (!this.apiKey) return ['Schedule optimized for efficiency'];
+
+    try {
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: 'Generate 3-4 brief, actionable insights about route optimization results. Be specific and quantitative.'
+            },
+            {
+              role: 'user',
+              content: `Optimization results:
+                - Distance saved: ${metrics.distanceSaved} miles
+                - Morning routes: ${metrics.morningRoutes}
+                - Afternoon routes: ${metrics.afternoonRoutes}
+                - Total jobs: ${metrics.totalJobs}
+                - Morning utilization: ${metrics.utilization?.morning}%
+                - Afternoon utilization: ${metrics.utilization?.afternoon}%`
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 150
+        })
+      });
+
+      const data = await response.json();
+      const insights = data.choices[0].message.content
+        .split('\n')
+        .filter(s => s.trim())
+        .slice(0, 4);
+      
+      return insights.length > 0 ? insights : [
+        'Route optimization complete',
+        'Crews assigned efficiently',
+        'Travel distance minimized'
+      ];
+    } catch (error) {
+      console.error('Insights generation error:', error);
+      return [
+        'Route optimization complete',
+        'Morning crews starting from farthest locations',
+        'Afternoon crews working outward from base'
+      ];
+    }
+  }
+
+  // ============================================
+  // ANALYZE DATA STRUCTURE (NEW)
+  // ============================================
+  async analyzeDataStructure(data) {
+    if (!this.apiKey) return { customerFields: [], jobFields: [] };
+
+    try {
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: 'Analyze CSV/Excel data and identify field mappings for landscaping business data import.'
+            },
+            {
+              role: 'user',
+              content: `Analyze this data sample and identify customer, job, and address fields: ${data.sample}`
+            }
+          ],
+          temperature: 0.3,
+          response_format: { type: "json_object" }
+        })
+      });
+
+      const result = await response.json();
+      return JSON.parse(result.choices[0].message.content);
+    } catch (error) {
+      console.error('Data structure analysis error:', error);
+      return {
+        customerFields: [],
+        jobFields: [],
+        addressFields: [],
+        contactFields: []
+      };
+    }
+  }
+
+  // ============================================
+  // PREDICT MAINTENANCE NEEDS (NEW)
+  // ============================================
+  async predictMaintenanceNeeds(customerData, serviceHistory) {
+    if (!this.apiKey) return null;
+
+    try {
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: 'Predict landscaping maintenance needs based on service history and seasonal patterns.'
+            },
+            {
+              role: 'user',
+              content: `Customer: ${JSON.stringify(customerData)}\nHistory: ${JSON.stringify(serviceHistory)}\nPredict next service needs.`
+            }
+          ],
+          temperature: 0.5,
+          response_format: { type: "json_object" }
+        })
+      });
+
+      const data = await response.json();
+      return JSON.parse(data.choices[0].message.content);
+    } catch (error) {
+      console.error('Maintenance prediction error:', error);
+      return null;
+    }
+  }
 }
 
 export { OpenAIService };
