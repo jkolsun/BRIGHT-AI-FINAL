@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { X, Upload, FileText, CheckCircle, AlertCircle, Loader, ArrowRight, Info } from 'lucide-react';
 import { supabase } from '../services/database/supabase';
+import { OpenAIService } from '../services/ai/openai';
 
 const SmartImportModal = ({ isOpen, onClose, importType, onImportComplete }) => {
   const [importing, setImporting] = useState(false);
